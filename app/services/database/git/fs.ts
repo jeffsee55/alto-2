@@ -6,6 +6,9 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 const splitAtGit = (path: string) => {
   const [before, after] = path.split("/.git");
+  if (path.endsWith("/.")) {
+    return { repoId: before, name: "/." };
+  }
   return { repoId: before, name: `.git${after}` };
 };
 
@@ -143,6 +146,19 @@ export const createFs = (drizzleDB: BetterSQLite3Database<typeof schema>) => {
       },
       readFile: async (...args: Parameters<typeof fs.promises.readFile>) => {
         const { repoId, name } = splitAtGit(args[0].toString());
+        if (name.endsWith(".pack")) {
+          const dbResponse = await drizzleDB.query.fileParts.findMany({
+            where: (fields, ops) =>
+              ops.and(ops.eq(fields.repoId, repoId), ops.eq(fields.name, name)),
+            orderBy: (fields) => fields.partNumber,
+          });
+          let value = "";
+          dbResponse.forEach((item) => (value += item.value));
+          return Buffer.concat(
+            dbResponse.map((item) => Buffer.from(item.value, "base64"))
+          );
+          // return ;
+        }
         const dbResponse = await drizzleDB.query.files.findFirst({
           where: (fields, ops) =>
             ops.and(ops.eq(fields.repoId, repoId), ops.eq(fields.name, name)),
@@ -172,49 +188,90 @@ export const createFs = (drizzleDB: BetterSQLite3Database<typeof schema>) => {
         }
         const { dir, base } = path.parse(name.toString());
         const birthtime = 1706724530491;
-        if (typeof value === "string") {
-          const size = Buffer.byteLength(value, "utf8");
-          await drizzleDB
-            .insert(schema.files)
-            .values({
-              repoId,
-              name: name.toString(),
-              value: btoa(value),
-              isDirectory: 0,
-              base,
-              dir,
-              birthtime,
-              size,
-              encoding,
-            })
-            .onConflictDoUpdate({
-              target: [schema.files.name, schema.files.repoId],
-              set: { value: btoa(value), encoding },
-            });
-        } else if (value instanceof Buffer) {
-          await drizzleDB
-            .insert(schema.files)
-            .values({
-              repoId,
-              name: name.toString(),
-              value: value.toString("base64"),
-              birthtime,
-              base,
-              dir,
-              isDirectory: 0,
-              size: value.byteLength,
-              encoding: "buffer",
-            })
-            .onConflictDoUpdate({
-              target: [schema.files.name, schema.files.repoId],
-              set: { value: value.toString("base64"), encoding: "buffer" },
-            });
+        if (name.endsWith(".pack")) {
+          if (value instanceof Buffer) {
+            let i = 0;
+            for await (const chunk of chunkBuffer(value, 10240)) {
+              await drizzleDB
+                .insert(schema.fileParts)
+                .values({
+                  repoId,
+                  name: name.toString(),
+                  value: chunk.toString("base64"),
+                  partNumber: i,
+                  birthtime,
+                  base,
+                  dir,
+                  isDirectory: 0,
+                  size: chunk.byteLength,
+                  encoding: "buffer",
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    schema.fileParts.name,
+                    schema.fileParts.repoId,
+                    schema.fileParts.partNumber,
+                  ],
+                  set: { value: chunk.toString("base64"), encoding: "buffer" },
+                });
+              i++;
+            }
+          }
         } else {
-          console.log(
-            `Expected string for writeFile, but got ${typeof value} for ${name}`
-          );
+          if (typeof value === "string") {
+            const size = Buffer.byteLength(value, "utf8");
+            await drizzleDB
+              .insert(schema.files)
+              .values({
+                repoId,
+                name: name.toString(),
+                value: btoa(value),
+                isDirectory: 0,
+                base,
+                dir,
+                birthtime,
+                size,
+                encoding,
+              })
+              .onConflictDoUpdate({
+                target: [schema.files.name, schema.files.repoId],
+                set: { value: btoa(value), encoding },
+              });
+          } else if (value instanceof Buffer) {
+            await drizzleDB
+              .insert(schema.files)
+              .values({
+                repoId,
+                name: name.toString(),
+                value: value.toString("base64"),
+                birthtime,
+                base,
+                dir,
+                isDirectory: 0,
+                size: value.byteLength,
+                encoding: "buffer",
+              })
+              .onConflictDoUpdate({
+                target: [schema.files.name, schema.files.repoId],
+                set: { value: value.toString("base64"), encoding: "buffer" },
+              });
+          } else {
+            console.log(
+              `Expected string for writeFile, but got ${typeof value} for ${name}`
+            );
+          }
         }
       },
     },
   };
 };
+async function* chunkBuffer(buffer: Buffer, chunkSize: number) {
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    const chunk = buffer.slice(offset, offset + chunkSize);
+    yield chunk;
+    offset += chunkSize;
+    await new Promise((resolve) => setTimeout(resolve, 0)); // Simulate asynchronous operation
+  }
+}

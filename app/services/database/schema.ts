@@ -66,6 +66,30 @@ export const files = sqliteTable(
   })
 );
 
+export const fileParts = sqliteTable(
+  "files_parts",
+  {
+    repoId: text("repo_id").notNull(),
+    name: text("name").notNull(),
+    partNumber: integer("part_number").notNull(),
+    value: text("value").notNull(),
+    size: integer("size").notNull(),
+    birthtime: integer("birthtime").notNull(),
+    base: text("base").notNull(),
+    dir: text("dir").notNull(),
+    // mtime: integer("mtime").notNull(),
+    // ctime: integer("ctime").notNull(),
+    // atime: integer("atime").notNull(),
+    isDirectory: integer("is_directory").notNull(),
+    // isFile: integer("is_file").notNull(),
+    // isSymbolicLink: integer("is_symbolic_link").notNull(),
+    encoding: text("encoding").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.repoId, t.name, t.partNumber] }),
+  })
+);
+
 export const fileRelations = relations(files, ({ one }) => ({
   repo: one(repos, {
     fields: [files.repoId],
@@ -304,5 +328,6 @@ export const schema = {
   repos,
   documentsToDocumentsRelations,
   files,
+  fileParts,
   filters,
 };

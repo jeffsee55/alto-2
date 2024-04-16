@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { sep } from "path";
 
 const TEST_SQLITE = "test.sqlite";
-const originalPathToGitRepo = "/Users/jeffsee/code/movie-content";
+const movieRepoPath = "/Users/jeffsee/code/movie-content";
 
 const tmpDir = tmpdir();
 
@@ -19,17 +19,23 @@ export const setup = async (
   args: {
     // When using a real db, ensure the schema is scaffolded via push:sqlite
     sqliteUrl?: string;
-  } = { sqliteUrl: ":memory:" }
+    preventReset?: boolean;
+    repoPath?: string;
+  } = { sqliteUrl: ":memory:", repoPath: movieRepoPath }
 ) => {
   const pathToGitRepo = await fs.mkdtempSync(`${tmpDir}${sep}`);
-  await fs.cpSync(originalPathToGitRepo, pathToGitRepo, { recursive: true });
+  await fs.cpSync(args.repoPath || movieRepoPath, pathToGitRepo, {
+    recursive: true,
+  });
   const sqlite = new SQLiteDatabase(args.sqliteUrl);
   const drizzleDB = drizzle(sqlite, { schema: schema });
   const database = new Database(drizzleDB);
   if (args.sqliteUrl === ":memory:") {
     await migrate(drizzleDB, { migrationsFolder: "./drizzle.test" });
   }
-  database.reset();
+  if (!args.preventReset) {
+    await database.reset();
+  }
   return { database, pathToGitRepo };
 };
 
@@ -55,7 +61,19 @@ function listGitBranches(cwd: string) {
 
 describe("clone", () => {
   it("works", async () => {
-    const { database, pathToGitRepo } = await setup({ sqliteUrl: TEST_SQLITE });
+    const { database, pathToGitRepo } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    await database.git.repo(pathToGitRepo).clone();
+    // await database.git.repo(pathToGitRepo).checkout({ ref: "main" });
+  });
+  it("can push a new branch", async () => {
+    const { database, pathToGitRepo } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
 
     await database.git.repo(pathToGitRepo).clone();
 
@@ -67,7 +85,10 @@ describe("clone", () => {
   });
 
   it("errors when already cloned", async () => {
-    const { database, pathToGitRepo } = await setup({ sqliteUrl: TEST_SQLITE });
+    const { database, pathToGitRepo } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
 
     await database.git.repo(pathToGitRepo).clone();
     await expect(
@@ -76,14 +97,20 @@ describe("clone", () => {
   });
 
   it("force clones", async () => {
-    const { database, pathToGitRepo } = await setup({ sqliteUrl: TEST_SQLITE });
-    await database.git.repo(pathToGitRepo).clone();
-    await database.git.repo(pathToGitRepo).clone({ force: true });
+    const { database, pathToGitRepo } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+    await database.git.repo(pathToGitRepo).clone({ ref: "main" });
+    await database.git.repo(pathToGitRepo).clone({ force: true, ref: "main" });
   });
   it(
     "clones from github",
     async () => {
-      const { database } = await setup({ sqliteUrl: TEST_SQLITE });
+      const { database } = await setup({
+        sqliteUrl: TEST_SQLITE,
+        repoPath: movieRepoPath,
+      });
       await database.git
         .repo("https://github.com/jeffsee55/movie-content")
         .clone();
@@ -95,6 +122,7 @@ describe("clone", () => {
     async () => {
       const { database, pathToGitRepo } = await setup({
         sqliteUrl: TEST_SQLITE,
+        repoPath: movieRepoPath,
       });
       await database.git
         .repo("https://github.com/jeffsee55/movie-content")

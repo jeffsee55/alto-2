@@ -38,10 +38,12 @@ export class Repo {
       return new RegExp("^" + regexString + "$", "i");
     }
     const regex = globToRegex(pattern);
+    const cache = {};
     const files = await git.listFiles({
       fs: this.fs,
       dir: this.dir,
       ref,
+      cache,
     });
     return files.filter((file) => regex.test(file));
   }
@@ -142,10 +144,22 @@ export class Repo {
   }
 
   async listFiles(args: { ref: string }) {
-    return git.listFiles({
+    const cache = {};
+    const res = await git.listFiles({
       fs: this.fs,
       dir: this.dir,
       ref: args.ref,
+      cache,
+    });
+    return res;
+  }
+  async statusMatrix(
+    args: Omit<Parameters<typeof git.statusMatrix>[0], "fs" | "dir">
+  ) {
+    return git.statusMatrix({
+      fs: this.fs,
+      dir: this.dir,
+      ...args,
     });
   }
 
@@ -199,16 +213,16 @@ export class Repo {
     }
     // Previously it seemed like I needed this, but maybe I don't... it seems like a resource-intensive process
     // It may have just been that I needed it for listing branches, but I can just get them from remote
-    // await git.checkout({
-    //   fs: this.fs,
-    //   dir: this.dir,
-    //   ...args,
-    // });
-    return git.resolveRef({
+    await git.checkout({
       fs: this.fs,
       dir: this.dir,
-      ref,
+      ...args,
     });
+    // return git.resolveRef({
+    //   fs: this.fs,
+    //   dir: this.dir,
+    //   ref,
+    // });
   }
 
   /**
@@ -222,20 +236,22 @@ export class Repo {
    *    in order to do this? It might also be worth using an in-memory k/v store
    *    for the import phase with iso git.
    */
-  async get(
-    filepath: string,
-    ref: string
-  ): Promise<{ blob: Uint8Array; string: string; sha: string }> {
+  async get(args: {
+    filepath: string;
+    ref: string;
+    cache: object;
+  }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
     const oid = await git.resolveRef({
       fs: this.fs,
       dir: this.dir,
-      ref,
+      ref: args.ref,
     });
     const { blob, oid: blobOid } = await git.readBlob({
       fs: this.fs,
       dir: this.dir,
       oid,
-      filepath,
+      filepath: args.filepath,
+      cache: args.cache,
     });
     const string = Buffer.from(blob).toString("utf8");
     return {
@@ -267,7 +283,25 @@ export class Repo {
     });
   }
 
-  async clone(args?: { force?: boolean }) {
+  async fetch(args: { ref: string }) {
+    const { url, http } =
+      this.remoteSource === "github"
+        ? { url: this.remoteURL, http: isoHTTP }
+        : createGitURL({ urlOrPath: this.dir });
+    const fs = createFs(this.drizzleDB);
+    return git.fetch({
+      fs,
+      http,
+      url,
+      dir: this.dir,
+      ref: args?.ref,
+      singleBranch: true,
+      depth: 1,
+      tags: false,
+    });
+  }
+
+  async clone(args?: { ref: string; force?: boolean }) {
     const { url, http } =
       this.remoteSource === "github"
         ? { url: this.remoteURL, http: isoHTTP }
@@ -288,19 +322,18 @@ export class Repo {
       }
     }
     await this.drizzleDB.insert(schema.repos).values({ id: this.dir });
-    try {
-      const done = await git.clone({
-        fs,
-        http,
-        url,
-        noCheckout: true,
-        depth: 1,
-        dir: this.dir,
-      });
-      return done;
-    } catch (e) {
-      console.log(e);
-    }
+    const cache = {};
+    const done = await git.clone({
+      fs,
+      http,
+      url,
+      noCheckout: true,
+      depth: 1,
+      dir: this.dir,
+      ref: args?.ref,
+      cache,
+    });
+    return done;
   }
 }
 
