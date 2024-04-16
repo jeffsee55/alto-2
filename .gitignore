@@ -3,4 +3,9 @@ node_modules
 /.cache
 /build
 .env
-drizzle
+
+drizzle.memory
+drizzle.dev
+drizzle.test
+dev.sqlite
+test.sqlite

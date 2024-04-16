@@ -43,22 +43,28 @@ export const commits = sqliteTable("commits", {
   sha: text("sha"),
 });
 
-export const files = sqliteTable("files", {
-  name: text("name").primaryKey().notNull(),
-  value: text("value").notNull(),
-  size: integer("size").notNull(),
-  birthtime: integer("birthtime").notNull(),
-  base: text("base").notNull(),
-  dir: text("dir").notNull(),
-  repoId: text("branch_id").notNull(),
-  // mtime: integer("mtime").notNull(),
-  // ctime: integer("ctime").notNull(),
-  // atime: integer("atime").notNull(),
-  isDirectory: integer("is_directory").notNull(),
-  // isFile: integer("is_file").notNull(),
-  // isSymbolicLink: integer("is_symbolic_link").notNull(),
-  encoding: text("encoding").notNull(),
-});
+export const files = sqliteTable(
+  "files",
+  {
+    repoId: text("repo_id").notNull(),
+    name: text("name").notNull(),
+    value: text("value").notNull(),
+    size: integer("size").notNull(),
+    birthtime: integer("birthtime").notNull(),
+    base: text("base").notNull(),
+    dir: text("dir").notNull(),
+    // mtime: integer("mtime").notNull(),
+    // ctime: integer("ctime").notNull(),
+    // atime: integer("atime").notNull(),
+    isDirectory: integer("is_directory").notNull(),
+    // isFile: integer("is_file").notNull(),
+    // isSymbolicLink: integer("is_symbolic_link").notNull(),
+    encoding: text("encoding").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.repoId, t.name] }),
+  })
+);
 
 export const fileRelations = relations(files, ({ one }) => ({
   repo: one(repos, {

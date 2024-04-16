@@ -8,7 +8,10 @@
     "dev": "remix vite:dev",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "start": "remix-serve ./build/server/index.js",
-    "db:reset": "rm -rf drizzle && pnpm drizzle-kit generate:sqlite",
+    "db:memory:generate": "rm -rf drizzle.memory && pnpm drizzle-kit generate:sqlite --schema=./app/services/database/schema.ts --out=drizzle.memory",
+    "db:test:push": "rm -rf drizzle.test && pnpm drizzle-kit push:sqlite --config drizzle.test.config.ts",
+    "db:test:reset": "rm test.sqlite && pnpm db:test:push",
+    "db:test:studio": "pnpm drizzle-kit studio --config drizzle.test.config.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
@@ -18,6 +21,8 @@
     "better-sqlite3": "^9.5.0",
     "drizzle-orm": "^0.30.8",
     "isbot": "^4.1.0",
+    "isomorphic-git": "^1.25.7",
+    "node-git-server": "^1.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "vitest": "^1.5.0"
