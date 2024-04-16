@@ -24,6 +24,7 @@ export class Database {
     await this._db.delete(this._schema.commits).run();
     await this._db.delete(this._schema.branches).run();
     await this._db.delete(this._schema.files).run();
+    await this._db.delete(this._schema.fileParts).run();
     await this._db.delete(this._schema.filters).run();
     await this._db.delete(this._schema.references).run();
     await this._db.delete(this._schema.documents).run();
