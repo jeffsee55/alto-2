@@ -1,5 +1,5 @@
-import * as git from "isomorphic-git";
-import isoHTTP from "isomorphic-git/http/node";
+import * as git from "~/services/isomorphic-git/src/index.js";
+import isoHTTP from "~/services/isomorphic-git/src/http/node";
 import { schema } from "~/services/database/schema";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { createGitURL } from "./git-server";
@@ -25,7 +25,7 @@ export class Repo {
       ? `${githubURL.host}${githubURL.pathname}`
       : dir;
     this.drizzleDB = drizzleDB;
-    this.fs = createFs(drizzleDB);
+    this.fs = createFs(drizzleDB, this.dir);
   }
 
   async glob(pattern: string, ref: string) {
@@ -134,6 +134,21 @@ export class Repo {
       ...args,
     });
   }
+  async direct() {
+    const meh = git.TREE({ ref: "main" });
+    console.log("direct", meh);
+    git.walk({
+      fs: this.fs,
+      dir: this.dir,
+      trees: [meh],
+      reduce: async ([entry]) => {
+        await entry.oid();
+        await entry.mode();
+        await entry.type();
+        console.log(entry);
+      },
+    });
+  }
 
   async add(args: Omit<Parameters<typeof git.add>[0], "fs" | "dir">) {
     return git.add({
@@ -152,6 +167,13 @@ export class Repo {
       cache,
     });
     return res;
+  }
+  async status(args: Omit<Parameters<typeof git.status>[0], "fs" | "dir">) {
+    return git.status({
+      fs: this.fs,
+      dir: this.dir,
+      ...args,
+    });
   }
   async statusMatrix(
     args: Omit<Parameters<typeof git.statusMatrix>[0], "fs" | "dir">
@@ -211,8 +233,6 @@ export class Repo {
     if (!ref) {
       throw new Error(`No ref provided for git checkout`);
     }
-    // Previously it seemed like I needed this, but maybe I don't... it seems like a resource-intensive process
-    // It may have just been that I needed it for listing branches, but I can just get them from remote
     await git.checkout({
       fs: this.fs,
       dir: this.dir,
@@ -239,7 +259,7 @@ export class Repo {
   async get(args: {
     filepath: string;
     ref: string;
-    cache: object;
+    cache?: object;
   }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
     const oid = await git.resolveRef({
       fs: this.fs,
@@ -288,12 +308,11 @@ export class Repo {
       this.remoteSource === "github"
         ? { url: this.remoteURL, http: isoHTTP }
         : createGitURL({ urlOrPath: this.dir });
-    const fs = createFs(this.drizzleDB);
     return git.fetch({
-      fs,
       http,
       url,
       dir: this.dir,
+      fs: this.fs,
       ref: args?.ref,
       singleBranch: true,
       depth: 1,
@@ -306,7 +325,6 @@ export class Repo {
       this.remoteSource === "github"
         ? { url: this.remoteURL, http: isoHTTP }
         : createGitURL({ urlOrPath: this.dir });
-    const fs = createFs(this.drizzleDB);
     const existing = await this.drizzleDB.query.repos.findFirst({
       where: (fields, ops) => ops.eq(fields.id, this.dir),
     });
@@ -324,7 +342,7 @@ export class Repo {
     await this.drizzleDB.insert(schema.repos).values({ id: this.dir });
     const cache = {};
     const done = await git.clone({
-      fs,
+      fs: this.fs,
       http,
       url,
       noCheckout: true,

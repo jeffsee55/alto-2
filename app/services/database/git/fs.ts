@@ -4,14 +4,6 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-const splitAtGit = (path: string) => {
-  const [before, after] = path.split("/.git");
-  if (path.endsWith("/.")) {
-    return { repoId: before, name: "/." };
-  }
-  return { repoId: before, name: `.git${after}` };
-};
-
 const log: typeof console.log = (...args) => {
   args;
   // console.log(...args);
@@ -39,7 +31,13 @@ const ENOENT = Err("ENOENT");
 // const ETIMEDOUT = Err("ETIMEDOUT");
 // const EISDIR = Err("EISDIR");
 
-export const createFs = (drizzleDB: BetterSQLite3Database<typeof schema>) => {
+export const createFs = (
+  drizzleDB: BetterSQLite3Database<typeof schema>,
+  repoId: string
+) => {
+  const splitAtGit = (path: string) => {
+    return { repoId, name: path.substring(repoId.length + 1) };
+  };
   return {
     promises: {
       chmod: async (...args: Parameters<typeof fs.promises.chmod>) => {
@@ -171,6 +169,9 @@ export const createFs = (drizzleDB: BetterSQLite3Database<typeof schema>) => {
           dbResponse?.encoding === "buffer"
             ? Buffer.from(dbResponse.value, "base64")
             : atob(dbResponse?.value);
+        if (name.includes(".git/objects") && !name.includes(".idx")) {
+          // console.log(name);
+        }
         return dbValue;
       },
       writeFile: async (...args: Parameters<typeof fs.promises.writeFile>) => {

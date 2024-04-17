@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import path from "path";
 import SQLiteDatabase from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -139,4 +140,44 @@ describe("clone", () => {
     },
     { timeout: 10000 }
   );
+});
+
+// TODO
+describe.only("adding a file", () => {
+  it("works", async () => {
+    const { database, pathToGitRepo } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    await database.git.repo(pathToGitRepo).clone();
+    const repo = await database.git.repo(pathToGitRepo);
+    // const name = "content/movies/movie10.json";
+    // const value = `{"title": "hi there!"}`;
+    // const { dir, base } = path.parse(name.toString());
+    // const birthtime = 1706724530491;
+    // const size = Buffer.byteLength(value, "utf8");
+    // await database._db.insert(database._schema.files).values({
+    //   repoId: pathToGitRepo,
+    //   name: name.toString(),
+    //   value: btoa(value),
+    //   isDirectory: 0,
+    //   base,
+    //   dir,
+    //   birthtime,
+    //   size,
+    //   encoding: "buffer",
+    // });
+    // await repo.add({ filepath: name });
+    // await repo.checkout({ ref: "main" });
+    // await repo.commit({
+    //   ref: "main",
+    //   message: `Added ${name}`,
+    //   author: { name: "Alto" },
+    // });
+    // const item = await repo.get({
+    //   ref: "main",
+    //   filepath: "content/movies/movie1.json",
+    // });
+  });
 });
