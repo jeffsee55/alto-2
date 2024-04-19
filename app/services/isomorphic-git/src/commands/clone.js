@@ -1,11 +1,11 @@
 // @ts-check
-import '../typedefs.js'
+import "../typedefs.js";
 
-import { _addRemote } from '../commands/addRemote.js'
-import { _checkout } from '../commands/checkout.js'
-import { _fetch } from '../commands/fetch.js'
-import { _init } from '../commands/init.js'
-import { GitConfigManager } from '../managers/GitConfigManager.js'
+import { _addRemote } from "../commands/addRemote.js";
+import { _checkout } from "../commands/checkout.js";
+import { _fetch } from "../commands/fetch.js";
+import { _init } from "../commands/init.js";
+import { GitConfigManager } from "../managers/GitConfigManager.js";
 
 /**
  * @param {object} args
@@ -60,12 +60,12 @@ export async function _clone({
   headers,
 }) {
   try {
-    await _init({ fs, gitdir })
-    await _addRemote({ fs, gitdir, remote, url, force: false })
+    await _init({ fs, gitdir });
+    await _addRemote({ fs, gitdir, remote, url, force: false });
     if (corsProxy) {
-      const config = await GitConfigManager.get({ fs, gitdir })
-      await config.set(`http.corsProxy`, corsProxy)
-      await GitConfigManager.save({ fs, gitdir, config })
+      const config = await GitConfigManager.get({ fs, gitdir });
+      await config.set(`http.corsProxy`, corsProxy);
+      await GitConfigManager.save({ fs, gitdir, config });
     }
     const { defaultBranch, fetchHead } = await _fetch({
       fs,
@@ -87,10 +87,10 @@ export async function _clone({
       singleBranch,
       headers,
       tags: !noTags,
-    })
-    if (fetchHead === null) return
-    ref = ref || defaultBranch
-    ref = ref.replace('refs/heads/', '')
+    });
+    if (fetchHead === null) return;
+    ref = ref || defaultBranch;
+    ref = ref.replace("refs/heads/", "");
     // Checkout that branch
     await _checkout({
       fs,
@@ -101,14 +101,14 @@ export async function _clone({
       ref,
       remote,
       noCheckout,
-    })
+    });
   } catch (err) {
     // Remove partial local repository, see #1283
     // Ignore any error as we are already failing.
     // The catch is necessary so the original error is not masked.
     await fs
       .rmdir(gitdir, { recursive: true, maxRetries: 10 })
-      .catch(() => undefined)
-    throw err
+      .catch(() => undefined);
+    throw err;
   }
 }

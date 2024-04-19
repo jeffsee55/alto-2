@@ -32,10 +32,6 @@ export async function _readObject({
   if (oid === "4b825dc642cb6eb9a060e54bf8d69288fbee4904") {
     result = { format: "wrapped", object: Buffer.from(`tree 0\x00`) };
   }
-  // Look for it in the loose object directory.
-  if (!result) {
-    result = await readObjectLoose({ fs, gitdir, oid });
-  }
   // Check to see if it's in a packfile.
   if (!result) {
     result = await readObjectPacked({
@@ -45,6 +41,13 @@ export async function _readObject({
       oid,
       getExternalRefDelta,
     });
+  }
+  /**
+   * TRIED REORDERING THIS BUT IT"S STILL SUPER SLOW
+   */
+  // Look for it in the loose object directory.
+  if (!result) {
+    result = await readObjectLoose({ fs, gitdir, oid });
   }
   // Finally
   if (!result) {

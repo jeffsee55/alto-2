@@ -170,7 +170,7 @@ export const createFs = (
             ? Buffer.from(dbResponse.value, "base64")
             : atob(dbResponse?.value);
         if (name.includes(".git/objects") && !name.includes(".idx")) {
-          // console.log(name);
+          // console.log(name, dbValue.toString());
         }
         return dbValue;
       },
@@ -262,6 +262,9 @@ export const createFs = (
             );
           }
         }
+        // if (name.includes(".git/objects") && !name.includes(".idx")) {
+        //   console.log(name, extra);
+        // }
       },
     },
   };

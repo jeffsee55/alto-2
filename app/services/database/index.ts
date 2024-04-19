@@ -18,6 +18,7 @@ export class Database {
 
   async reset() {
     await this._db.delete(this._schema.repos).run();
+    await this._db.delete(this._schema.trees).run();
     await this._db.delete(this._schema.changesets).run();
     await this._db.delete(this._schema.commitEntries).run();
     await this._db.delete(this._schema.commit2Entries).run();

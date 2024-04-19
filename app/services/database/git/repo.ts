@@ -4,7 +4,7 @@ import { schema } from "~/services/database/schema";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { createGitURL } from "./git-server";
 import { createFs } from "./fs";
-import { eq } from "drizzle-orm";
+import { and, eq, like, not } from "drizzle-orm";
 
 export class Repo {
   drizzleDB: BetterSQLite3Database<typeof schema>;
@@ -134,20 +134,110 @@ export class Repo {
       ...args,
     });
   }
-  async direct() {
-    const meh = git.TREE({ ref: "main" });
-    console.log("direct", meh);
-    git.walk({
+  async fastList({ ref }) {
+    console.time(`time elapsed`);
+    const matrix = await git.statusMatrix({
+      fs: this.fs,
+      dir: this.dir,
+      ref,
+      filter: (f) => f.endsWith(".json") || f.endsWith(".md"),
+    });
+    let files = 0;
+    for (const [filepath, head, workdir, stage] of matrix) {
+      // console.log(`${filepath}: ${head} ${workdir} ${stage}`)
+      files++;
+    }
+    console.log("files listed", files);
+    console.timeEnd(`time elapsed`);
+  }
+  async direct({ ref }) {
+    const commitOid = await git.resolveRef({
+      fs: this.fs,
+      dir: this.dir,
+      ref,
+    });
+    // const commit = await git.readCommit({
+    //   fs: this.fs,
+    //   dir: this.dir,
+    //   oid: commitOid,
+    // });
+    // console.log(commit);
+    // await this.readCommit({fs: this.fs, dir: this.dir,  })
+    // console.log(commit);
+    // const commit2 = await git.writeCommit({
+    //   fs: {
+    //     promises: {
+    //       ...this.fs.promises,
+    //       writeFile: async (...args) => {
+    //         console.log("args", args);
+    //         return {};
+    //       },
+    //     },
+    //   },
+    //   dir: this.dir,
+    //   commit: commit.commit,
+    // });
+    const meh = git.TREE({ ref });
+    const oids: string[] = [commitOid];
+    await git.walk({
       fs: this.fs,
       dir: this.dir,
       trees: [meh],
       reduce: async ([entry]) => {
-        await entry.oid();
-        await entry.mode();
-        await entry.type();
-        console.log(entry);
+        const oid = await entry.oid();
+        const type = await entry.type();
+        if (type === "tree") {
+          oids.push(oid);
+        }
+        if (type === "blob") {
+          const content = await entry.content();
+          await git.writeBlob({ fs: this.fs, dir: this.dir, blob: content });
+        }
       },
     });
+    // console.log(oids);
+    const res = await git.packObjects({
+      fs: this.fs,
+      dir: this.dir,
+      write: true,
+      oids,
+    });
+    await git.indexPack({
+      fs: this.fs,
+      dir: this.dir,
+      filepath: `.git/objects/pack/${res.filename}`,
+    });
+
+    await this.drizzleDB
+      .delete(schema.files)
+      .where(
+        and(
+          eq(schema.files.repoId, this.dir),
+          like(schema.files.name, `%.idx`),
+          not(
+            eq(
+              schema.files.name,
+              `.git/objects/pack/${res.filename.replace(".pack", ".idx")}`
+            )
+          )
+        )
+      );
+    await this.drizzleDB
+      .delete(schema.fileParts)
+      .where(
+        and(
+          eq(schema.fileParts.repoId, this.dir),
+          not(eq(schema.fileParts.name, `.git/objects/pack/${res.filename}`))
+        )
+      );
+    // packfiles = packfiles.filter((name) => name.endsWith(".pack"));
+    // console.log("packfiles", packfiles);
+    // const commit = await git.readCommit({
+    //   fs: this.fs,
+    //   dir: this.dir,
+    //   oid: commitOid,
+    // });
+    // console.log(commit);
   }
 
   async add(args: Omit<Parameters<typeof git.add>[0], "fs" | "dir">) {
@@ -221,6 +311,7 @@ export class Repo {
   }
 
   async commit(args: Omit<Parameters<typeof git.commit>[0], "fs" | "dir">) {
+    // const fs = createFs(this.drizzleDB, this.dir, { action: "committing" });
     return git.commit({
       fs: this.fs,
       dir: this.dir,

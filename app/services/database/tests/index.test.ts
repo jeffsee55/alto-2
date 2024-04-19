@@ -8,13 +8,14 @@ import { schema } from "~/services/database/schema";
 import fs from "fs";
 import { exec } from "child_process";
 import { RepoError } from "../git/repo";
-import { tmpdir } from "node:os";
 import { sep } from "path";
+import tmp from "tmp-promise";
+
+tmp.setGracefulCleanup();
 
 const TEST_SQLITE = "test.sqlite";
 const movieRepoPath = "/Users/jeffsee/code/movie-content";
-
-const tmpDir = tmpdir();
+const largeRepoPath = "/Users/jeffsee/code/smashing-magazine";
 
 export const setup = async (
   args: {
@@ -24,10 +25,12 @@ export const setup = async (
     repoPath?: string;
   } = { sqliteUrl: ":memory:", repoPath: movieRepoPath }
 ) => {
-  const pathToGitRepo = await fs.mkdtempSync(`${tmpDir}${sep}`);
-  await fs.cpSync(args.repoPath || movieRepoPath, pathToGitRepo, {
-    recursive: true,
-  });
+  // const tmpDir = tmp.dirSync({ unsafeCleanup: true });
+  // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
+  // await fs.cpSync(args.repoPath || movieRepoPath, pathToGitRepo, {
+  //   recursive: true,
+  // });
+  const pathToGitRepo = args.repoPath!;
   const sqlite = new SQLiteDatabase(args.sqliteUrl);
   const drizzleDB = drizzle(sqlite, { schema: schema });
   const database = new Database(drizzleDB);
@@ -37,7 +40,10 @@ export const setup = async (
   if (!args.preventReset) {
     await database.reset();
   }
-  return { database, pathToGitRepo };
+  return {
+    database,
+    pathToGitRepo,
+  };
 };
 
 function listGitBranches(cwd: string) {
@@ -144,40 +150,60 @@ describe("clone", () => {
 
 // TODO
 describe.only("adding a file", () => {
-  it("works", async () => {
-    const { database, pathToGitRepo } = await setup({
-      sqliteUrl: TEST_SQLITE,
-      repoPath: movieRepoPath,
-    });
+  it(
+    "works",
+    async () => {
+      const { database, pathToGitRepo } = await setup({
+        sqliteUrl: TEST_SQLITE,
+        repoPath: largeRepoPath,
+        preventReset: true,
+        // copy: false
+      });
+      const ref = "master";
 
-    await database.git.repo(pathToGitRepo).clone();
-    const repo = await database.git.repo(pathToGitRepo);
-    // const name = "content/movies/movie10.json";
-    // const value = `{"title": "hi there!"}`;
-    // const { dir, base } = path.parse(name.toString());
-    // const birthtime = 1706724530491;
-    // const size = Buffer.byteLength(value, "utf8");
-    // await database._db.insert(database._schema.files).values({
-    //   repoId: pathToGitRepo,
-    //   name: name.toString(),
-    //   value: btoa(value),
-    //   isDirectory: 0,
-    //   base,
-    //   dir,
-    //   birthtime,
-    //   size,
-    //   encoding: "buffer",
-    // });
-    // await repo.add({ filepath: name });
-    // await repo.checkout({ ref: "main" });
-    // await repo.commit({
-    //   ref: "main",
-    //   message: `Added ${name}`,
-    //   author: { name: "Alto" },
-    // });
-    // const item = await repo.get({
-    //   ref: "main",
-    //   filepath: "content/movies/movie1.json",
-    // });
-  });
+      const repo = database.git.repo(pathToGitRepo);
+      // await repo.clone({ ref });
+      console.log("clone done");
+      // const branches = await repo.listBranches({ remote: "origin" });
+      // console.log(branches);
+      // await repo.direct({ ref });
+      console.log("direct done");
+      console.time("list");
+      const files = await repo.listFiles({ ref: "master" });
+      console.log(files.length);
+      console.timeEnd("list");
+      // await repo.fastList({ ref: "master" });
+
+      // const name = "content/movies/movie10.json";
+      // const value = `{"title": "hi there!"}`;
+      // const { dir, base } = path.parse(name.toString());
+      // const birthtime = 1706724530491;
+      // const size = Buffer.byteLength(value, "utf8");
+      // await database._db.insert(database._schema.files).values({
+      //   repoId: pathToGitRepo,
+      //   name: name.toString(),
+      //   value: btoa(value),
+      //   isDirectory: 0,
+      //   base,
+      //   dir,
+      //   birthtime,
+      //   size,
+      //   encoding: "buffer",
+      // });
+      // await repo.add({ filepath: name });
+      // // await repo.checkout({ ref: "main" });
+      // await repo.commit({
+      //   ref: "main",
+      //   message: `Added ${name}`,
+      //   author: { name: "Alto" },
+      // });
+      const item = await repo.get({
+        ref,
+        filepath: "2011-11-01-building-wordpress-themes-you-can-sell.md",
+        // filepath: "content/movies/movie1.json",
+      });
+      // console.log(item.string);
+    },
+    { timeout: 100000 }
+  );
 });
