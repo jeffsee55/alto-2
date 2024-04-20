@@ -6,10 +6,10 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 const log: typeof console.log = (...args) => {
   args;
-  // console.log(...args);
+  console.log(...args);
 };
 
-function Err(name: string) {
+export function Err(name: string) {
   return class extends Error {
     code: string;
     constructor(...args: Parameters<typeof Error>) {
@@ -24,20 +24,22 @@ function Err(name: string) {
   };
 }
 
-const ENOENT = Err("ENOENT");
+export const ENOENT = Err("ENOENT");
 // const EEXIST = Err("EEXIST");
 // const ENOTDIR = Err("ENOTDIR");
 // const ENOTEMPTY = Err("ENOTEMPTY");
 // const ETIMEDOUT = Err("ETIMEDOUT");
 // const EISDIR = Err("EISDIR");
 
-export const createFs = (
+export const createFs = async (
   drizzleDB: BetterSQLite3Database<typeof schema>,
   repoId: string
 ) => {
   const splitAtGit = (path: string) => {
     return { repoId, name: path.substring(repoId.length + 1) };
   };
+  const tree = await drizzleDB.query.trees.findFirst();
+  const treeObject = JSON.parse(tree.content);
   return {
     promises: {
       chmod: async (...args: Parameters<typeof fs.promises.chmod>) => {
@@ -131,7 +133,6 @@ export const createFs = (
           .onConflictDoNothing();
       },
       readdir: async (...args: Parameters<typeof fs.promises.readdir>) => {
-        log(`readdir with arguments:`, args);
         const { repoId, name } = splitAtGit(args[0].toString());
         const children = (
           await drizzleDB.query.files.findMany({
@@ -144,6 +145,27 @@ export const createFs = (
       },
       readFile: async (...args: Parameters<typeof fs.promises.readFile>) => {
         const { repoId, name } = splitAtGit(args[0].toString());
+        log(`readFile with argument:`, repoId, name);
+        if (name === ".git/main") {
+          return tree.sha;
+        }
+        if (name.startsWith(".git/objects/")) {
+          const sha = name.replace(".git/objects/", "").replace("/", "");
+          console.log("hi again?", sha);
+          console.dir(JSON.parse(tree.shaTree));
+          const res = JSON.parse(tree.shaTree)[sha];
+          console.log(res);
+          if (res) {
+            return res;
+          }
+          throw new ENOENT(name);
+        }
+        // const sha =
+        // console.log(tree?.shaContent);
+        if (name === ".git/objects/2d/2b3b2d61ea4a62cd88c8fc43b73fe6a1fd8a31") {
+          return Buffer.from(`x��K!]s
+          .��b�n�zh�uT�Ɉ��3�{��R���.\`�7"�B@]�Dv�z��&W�J������Ś7zw��bś��X��Y'��VPc�BJ�o�/�������1ևhr�tky~M����A+L�Z�UPJ:v�C�Z�m�O�U�շD�% `);
+        }
         if (name.endsWith(".pack")) {
           const dbResponse = await drizzleDB.query.fileParts.findMany({
             where: (fields, ops) =>

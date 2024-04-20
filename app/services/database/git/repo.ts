@@ -9,7 +9,7 @@ import { and, eq, like, not } from "drizzle-orm";
 export class Repo {
   drizzleDB: BetterSQLite3Database<typeof schema>;
   dir: string;
-  fs: ReturnType<typeof createFs>;
+  fs: ReturnType<typeof createFs> | undefined;
   remoteSource: "github" | "local";
   remoteURL: string;
 
@@ -25,7 +25,13 @@ export class Repo {
       ? `${githubURL.host}${githubURL.pathname}`
       : dir;
     this.drizzleDB = drizzleDB;
-    this.fs = createFs(drizzleDB, this.dir);
+  }
+
+  async getFs() {
+    if (!this.fs) {
+      this.fs = await createFs(this.drizzleDB, this.dir);
+    }
+    return this.fs;
   }
 
   async glob(pattern: string, ref: string) {
@@ -40,7 +46,7 @@ export class Repo {
     const regex = globToRegex(pattern);
     const cache = {};
     const files = await git.listFiles({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ref,
       cache,
@@ -56,14 +62,14 @@ export class Repo {
     args: Omit<Parameters<typeof git.writeBlob>[0], "fs" | "dir">
   ) {
     return git.writeBlob({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
   }
   async readTree(args: Omit<Parameters<typeof git.readTree>[0], "fs" | "dir">) {
     return git.readTree({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -72,7 +78,7 @@ export class Repo {
     args: Omit<Parameters<typeof git.readCommit>[0], "fs" | "dir">
   ) {
     return git.readCommit({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -80,7 +86,7 @@ export class Repo {
 
   async merge(args: Omit<Parameters<typeof git.merge>[0], "fs" | "dir">) {
     return git.merge({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       author: {
         email: "mrtest@example.com",
@@ -95,14 +101,14 @@ export class Repo {
     args: Omit<Parameters<typeof git.writeTree>[0], "fs" | "dir">
   ) {
     return git.writeTree({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
   }
   async writeRef(args: Omit<Parameters<typeof git.writeRef>[0], "fs" | "dir">) {
     return git.writeRef({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -111,7 +117,7 @@ export class Repo {
     args: Omit<Parameters<typeof git.writeCommit>[0], "fs" | "dir">
   ) {
     return git.writeCommit({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -119,7 +125,7 @@ export class Repo {
 
   async readBlob(args: Omit<Parameters<typeof git.readBlob>[0], "fs" | "dir">) {
     return git.readBlob({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -129,45 +135,30 @@ export class Repo {
     args: Omit<Parameters<typeof git.readObject>[0], "fs" | "dir">
   ) {
     return git.readObject({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
   }
-  async fastList({ ref }) {
-    console.time(`time elapsed`);
-    const matrix = await git.statusMatrix({
-      fs: this.fs,
-      dir: this.dir,
-      ref,
-      filter: (f) => f.endsWith(".json") || f.endsWith(".md"),
-    });
-    let files = 0;
-    for (const [filepath, head, workdir, stage] of matrix) {
-      // console.log(`${filepath}: ${head} ${workdir} ${stage}`)
-      files++;
-    }
-    console.log("files listed", files);
-    console.timeEnd(`time elapsed`);
-  }
+
   async direct({ ref }) {
     const commitOid = await git.resolveRef({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ref,
     });
     // const commit = await git.readCommit({
-    //   fs: this.fs,
+    //   fs: await this.getFs(),
     //   dir: this.dir,
     //   oid: commitOid,
     // });
     // console.log(commit);
-    // await this.readCommit({fs: this.fs, dir: this.dir,  })
+    // await this.readCommit({fs: await this.getFs(), dir: this.dir,  })
     // console.log(commit);
     // const commit2 = await git.writeCommit({
     //   fs: {
     //     promises: {
-    //       ...this.fs.promises,
+    //       ...await this.getFs().promises,
     //       writeFile: async (...args) => {
     //         console.log("args", args);
     //         return {};
@@ -180,7 +171,7 @@ export class Repo {
     const meh = git.TREE({ ref });
     const oids: string[] = [commitOid];
     await git.walk({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       trees: [meh],
       reduce: async ([entry]) => {
@@ -191,19 +182,23 @@ export class Repo {
         }
         if (type === "blob") {
           const content = await entry.content();
-          await git.writeBlob({ fs: this.fs, dir: this.dir, blob: content });
+          await git.writeBlob({
+            fs: await this.getFs(),
+            dir: this.dir,
+            blob: content,
+          });
         }
       },
     });
     // console.log(oids);
     const res = await git.packObjects({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       write: true,
       oids,
     });
     await git.indexPack({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       filepath: `.git/objects/pack/${res.filename}`,
     });
@@ -233,7 +228,7 @@ export class Repo {
     // packfiles = packfiles.filter((name) => name.endsWith(".pack"));
     // console.log("packfiles", packfiles);
     // const commit = await git.readCommit({
-    //   fs: this.fs,
+    //   fs: await this.getFs(),
     //   dir: this.dir,
     //   oid: commitOid,
     // });
@@ -242,7 +237,7 @@ export class Repo {
 
   async add(args: Omit<Parameters<typeof git.add>[0], "fs" | "dir">) {
     return git.add({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -251,7 +246,7 @@ export class Repo {
   async listFiles(args: { ref: string }) {
     const cache = {};
     const res = await git.listFiles({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ref: args.ref,
       cache,
@@ -260,7 +255,7 @@ export class Repo {
   }
   async status(args: Omit<Parameters<typeof git.status>[0], "fs" | "dir">) {
     return git.status({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -269,7 +264,7 @@ export class Repo {
     args: Omit<Parameters<typeof git.statusMatrix>[0], "fs" | "dir">
   ) {
     return git.statusMatrix({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -277,7 +272,7 @@ export class Repo {
 
   async branch(args: Omit<Parameters<typeof git.branch>[0], "fs" | "dir">) {
     return git.branch({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -287,7 +282,7 @@ export class Repo {
     args: Omit<Parameters<typeof git.listBranches>[0], "fs" | "dir">
   ) {
     return git.listBranches({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -296,7 +291,7 @@ export class Repo {
     args: Omit<Parameters<typeof git.resolveRef>[0], "fs" | "dir">
   ) {
     return git.resolveRef({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -304,7 +299,7 @@ export class Repo {
 
   async log(args: Omit<Parameters<typeof git.log>[0], "fs" | "dir">) {
     return git.log({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -313,7 +308,7 @@ export class Repo {
   async commit(args: Omit<Parameters<typeof git.commit>[0], "fs" | "dir">) {
     // const fs = createFs(this.drizzleDB, this.dir, { action: "committing" });
     return git.commit({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -325,12 +320,12 @@ export class Repo {
       throw new Error(`No ref provided for git checkout`);
     }
     await git.checkout({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
     // return git.resolveRef({
-    //   fs: this.fs,
+    //   fs: await this.getFs(),
     //   dir: this.dir,
     //   ref,
     // });
@@ -353,12 +348,12 @@ export class Repo {
     cache?: object;
   }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
     const oid = await git.resolveRef({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ref: args.ref,
     });
     const { blob, oid: blobOid } = await git.readBlob({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       oid,
       filepath: args.filepath,
@@ -374,7 +369,7 @@ export class Repo {
 
   async init(args: Omit<Parameters<typeof git.init>[0], "fs" | "dir">) {
     return git.init({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       ...args,
     });
@@ -386,7 +381,7 @@ export class Repo {
         : createGitURL({ urlOrPath: this.dir });
 
     return git.push({
-      fs: this.fs,
+      fs: await this.getFs(),
       dir: this.dir,
       http,
       url,
@@ -403,7 +398,7 @@ export class Repo {
       http,
       url,
       dir: this.dir,
-      fs: this.fs,
+      fs: await this.getFs(),
       ref: args?.ref,
       singleBranch: true,
       depth: 1,
@@ -433,7 +428,7 @@ export class Repo {
     await this.drizzleDB.insert(schema.repos).values({ id: this.dir });
     const cache = {};
     const done = await git.clone({
-      fs: this.fs,
+      fs: await this.getFs(),
       http,
       url,
       noCheckout: true,

@@ -46,6 +46,7 @@ export const commits = sqliteTable("commits", {
 export const trees = sqliteTable("trees", {
   sha: text("sha").primaryKey().notNull(),
   content: text("content").notNull(),
+  shaTree: text("sha_tree").notNull(),
 });
 
 export const files = sqliteTable(
