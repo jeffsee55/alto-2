@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import path from "path";
@@ -87,7 +87,10 @@ describe("clone", () => {
       });
     }
 
-    function organizeObjectsIntoTree(objects: ObjectInfo[]) {
+    function organizeObjectsIntoTree(
+      objects: ObjectInfo[],
+      topLevelTreeSha: string
+    ) {
       const blobs: Record<string, string> = {};
       const trees: Record<string, string> = {};
       const tree: TreeNode = {
@@ -138,12 +141,6 @@ describe("clone", () => {
         }
 
         if (node.type === "tree") {
-          // trees[node.sha] = node.entries;
-          function getLastPart(filepath: string): string {
-            // Split the filepath by '/' and get the last part
-            const parts = filepath.split("/");
-            return parts[parts.length - 1];
-          }
           const entries = Object.values(node?.entries || {}).map((entry) => ({
             mode: entry.mode,
             path: getLastPart(entry.filepath),
@@ -161,11 +158,18 @@ describe("clone", () => {
         const parts = object.filepath.split("/");
         buildTree(tree, parts, object);
       });
-
+      const entries = Object.values(tree.entries || {}).map((entry) => ({
+        mode: entry.mode,
+        path: getLastPart(entry.filepath),
+        oid: entry.sha,
+        type: entry.type,
+      }));
+      trees[topLevelTreeSha] = { filepath: ".", entries };
       return { tree, blobs, trees };
     }
 
     function listGitBranches(cwd: string) {
+      let commitCompressed = "";
       return new Promise((resolve, reject) => {
         exec(
           `git ls-tree ${ref} -r -t`,
@@ -179,6 +183,33 @@ describe("clone", () => {
               reject(`Git stderr: ${stderr}`);
               return;
             }
+            const oid = await git.resolveRef({ fs, dir: cwd, ref: ref });
+            const commit = await git.readCommit({ fs: fs, dir: cwd, oid });
+            await git.writeCommit({
+              commit: {
+                ...commit.commit,
+                message: commit.commit.message.trim(),
+              },
+              fs: {
+                promises: {
+                  ...fs.promises,
+                  stat: async (
+                    ...args: Parameters<typeof fs.promises.stat>
+                  ) => {
+                    throw new ENOENT(args[0]);
+                  },
+                  lstat: async (
+                    ...args: Parameters<typeof fs.promises.lstat>
+                  ) => {
+                    throw new ENOENT(args[0]);
+                  },
+                  writeFile: async (...args) => {
+                    commitCompressed = args[1].toString("base64");
+                  },
+                },
+              },
+              dir: cwd,
+            });
 
             const lines = stdout.trim().split("\n");
 
@@ -192,13 +223,21 @@ describe("clone", () => {
               const [sha, filepath] = rest.split("\t");
               jsonLines.push({ mode, type, sha, filepath });
             });
-            const { tree, blobs, trees } = organizeObjectsIntoTree(jsonLines);
+            const { tree, blobs, trees } = organizeObjectsIntoTree(
+              jsonLines,
+              commit.commit.tree
+            );
 
             const shaTree = {};
+            // console.log(trees);
+            // console.log(trees);
+            // const topLevel = {}
+            // trees[commit.commit.tree] = {entries: []}
             for await (const [treeSha, info] of Object.entries(trees)) {
               const entries = info.entries;
+              // console.log(entries);
               let treeCompressed = "";
-              const treeSha2 = await git.writeTree({
+              await git.writeTree({
                 tree: entries,
                 fs: {
                   promises: {
@@ -220,7 +259,7 @@ describe("clone", () => {
                       if (treeSha !== outputSha) {
                         throw new Error(`Unmatched tree`);
                       }
-                      treeCompressed = args[1].toString();
+                      treeCompressed = args[1].toString("base64");
                       shaTree[treeSha] = treeCompressed;
                     },
                   },
@@ -233,6 +272,7 @@ describe("clone", () => {
             await database._db.insert(schema.trees).values({
               sha,
               content: JSON.stringify(tree),
+              commit: commitCompressed,
               shaTree: JSON.stringify(shaTree),
             });
             for await (const [sha, filepath] of Object.entries(blobs)) {
@@ -267,7 +307,10 @@ describe("clone", () => {
 
     await listGitBranches(pathToGitRepo);
     const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
-    // console.log(files);
+    console.log(files.length);
+    // expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
+    //   "clone-and-list.json"
+    // );
   });
   // about 60000 being used right now
   // { timeout: 150000 }
@@ -286,4 +329,10 @@ interface TreeNode {
   sha: string;
   filepath: string;
   entries?: { [key: string]: TreeNode | ObjectInfo };
+}
+// trees[node.sha] = node.entries;
+function getLastPart(filepath: string): string {
+  // Split the filepath by '/' and get the last part
+  const parts = filepath.split("/");
+  return parts[parts.length - 1];
 }

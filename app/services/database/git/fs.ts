@@ -38,8 +38,9 @@ export const createFs = async (
   const splitAtGit = (path: string) => {
     return { repoId, name: path.substring(repoId.length + 1) };
   };
-  const tree = await drizzleDB.query.trees.findFirst();
-  const treeObject = JSON.parse(tree.content);
+  const tree = await drizzleDB.query.trees.findFirst({
+    columns: { commit: true, sha: true, shaTree: true },
+  });
   return {
     promises: {
       chmod: async (...args: Parameters<typeof fs.promises.chmod>) => {
@@ -134,6 +135,7 @@ export const createFs = async (
       },
       readdir: async (...args: Parameters<typeof fs.promises.readdir>) => {
         const { repoId, name } = splitAtGit(args[0].toString());
+        // console.log("readdir", repoId, name);
         const children = (
           await drizzleDB.query.files.findMany({
             where: (fields, ops) =>
@@ -144,57 +146,23 @@ export const createFs = async (
         return children;
       },
       readFile: async (...args: Parameters<typeof fs.promises.readFile>) => {
-        const { repoId, name } = splitAtGit(args[0].toString());
-        log(`readFile with argument:`, repoId, name);
+        const { name } = splitAtGit(args[0].toString());
         if (name === ".git/main") {
           return tree.sha;
         }
         if (name.startsWith(".git/objects/")) {
           const sha = name.replace(".git/objects/", "").replace("/", "");
-          console.log("hi again?", sha);
-          console.dir(JSON.parse(tree.shaTree));
-          const res = JSON.parse(tree.shaTree)[sha];
-          console.log(res);
-          if (res) {
-            return res;
+          if (sha === tree.sha) {
+            return Buffer.from(tree.commit, "base64");
           }
-          throw new ENOENT(name);
+          const res = JSON.parse(tree.shaTree)[sha];
+          if (res) {
+            return Buffer.from(res, "base64");
+          }
+          console.log("falling throught...", args[0]);
+          return fs.promises.readFile(...args);
         }
-        // const sha =
-        // console.log(tree?.shaContent);
-        if (name === ".git/objects/2d/2b3b2d61ea4a62cd88c8fc43b73fe6a1fd8a31") {
-          return Buffer.from(`x��K!]s
-          .��b�n�zh�uT�Ɉ��3�{��R���.\`�7"�B@]�Dv�z��&W�J������Ś7zw��bś��X��Y'��VPc�BJ�o�/�������1ևhr�tky~M����A+L�Z�UPJ:v�C�Z�m�O�U�շD�% `);
-        }
-        if (name.endsWith(".pack")) {
-          const dbResponse = await drizzleDB.query.fileParts.findMany({
-            where: (fields, ops) =>
-              ops.and(ops.eq(fields.repoId, repoId), ops.eq(fields.name, name)),
-            orderBy: (fields) => fields.partNumber,
-          });
-          let value = "";
-          dbResponse.forEach((item) => (value += item.value));
-          return Buffer.concat(
-            dbResponse.map((item) => Buffer.from(item.value, "base64"))
-          );
-          // return ;
-        }
-        const dbResponse = await drizzleDB.query.files.findFirst({
-          where: (fields, ops) =>
-            ops.and(ops.eq(fields.repoId, repoId), ops.eq(fields.name, name)),
-        });
-        if (!dbResponse) {
-          // console.log(`Expected db to have value when reading file ${name}`);
-          throw new ENOENT(name);
-        }
-        const dbValue =
-          dbResponse?.encoding === "buffer"
-            ? Buffer.from(dbResponse.value, "base64")
-            : atob(dbResponse?.value);
-        if (name.includes(".git/objects") && !name.includes(".idx")) {
-          // console.log(name, dbValue.toString());
-        }
-        return dbValue;
+        throw new ENOENT(name);
       },
       writeFile: async (...args: Parameters<typeof fs.promises.writeFile>) => {
         const { repoId, name } = splitAtGit(args[0].toString());

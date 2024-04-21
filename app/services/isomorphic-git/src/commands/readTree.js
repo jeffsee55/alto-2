@@ -1,8 +1,8 @@
 // @ts-check
-import '../typedefs.js'
+import "../typedefs.js";
 
-import { resolveFilepath } from '../utils/resolveFilepath.js'
-import { resolveTree } from '../utils/resolveTree.js'
+import { resolveFilepath } from "../utils/resolveFilepath.js";
+import { resolveTree } from "../utils/resolveTree.js";
 
 /**
  *
@@ -29,12 +29,12 @@ export async function _readTree({
   filepath = undefined,
 }) {
   if (filepath !== undefined) {
-    oid = await resolveFilepath({ fs, cache, gitdir, oid, filepath })
+    oid = await resolveFilepath({ fs, cache, gitdir, oid, filepath });
   }
-  const { tree, oid: treeOid } = await resolveTree({ fs, cache, gitdir, oid })
+  const { tree, oid: treeOid } = await resolveTree({ fs, cache, gitdir, oid });
   const result = {
     oid: treeOid,
     tree: tree.entries(),
-  }
-  return result
+  };
+  return result;
 }

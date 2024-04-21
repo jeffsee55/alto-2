@@ -1,10 +1,10 @@
 // @ts-check
-import '../typedefs.js'
+import "../typedefs.js";
 
-import { _listFiles } from '../commands/listFiles'
-import { FileSystem } from '../models/FileSystem.js'
-import { assertParameter } from '../utils/assertParameter.js'
-import { join } from '../utils/join'
+import { _listFiles } from "../commands/listFiles";
+import { FileSystem } from "../models/FileSystem.js";
+import { assertParameter } from "../utils/assertParameter.js";
+import { join } from "../utils/join";
 
 /**
  * List all the files in the git index or a commit
@@ -33,22 +33,22 @@ import { join } from '../utils/join'
 export async function listFiles({
   fs,
   dir,
-  gitdir = join(dir, '.git'),
+  gitdir = join(dir, ".git"),
   ref,
   cache = {},
 }) {
   try {
-    assertParameter('fs', fs)
-    assertParameter('gitdir', gitdir)
+    assertParameter("fs", fs);
+    assertParameter("gitdir", gitdir);
 
     return await _listFiles({
       fs: new FileSystem(fs),
       cache,
       gitdir,
       ref,
-    })
+    });
   } catch (err) {
-    err.caller = 'git.listFiles'
-    throw err
+    err.caller = "git.listFiles";
+    throw err;
   }
 }

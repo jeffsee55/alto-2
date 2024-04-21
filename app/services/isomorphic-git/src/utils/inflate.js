@@ -1,30 +1,31 @@
 /* eslint-env node, browser */
 /* global DecompressionStream */
-import pako from 'pako'
+import pako from "pako";
 
-let supportsDecompressionStream = false
+let supportsDecompressionStream = false;
 
 export async function inflate(buffer) {
   if (supportsDecompressionStream === null) {
-    supportsDecompressionStream = testDecompressionStream()
+    supportsDecompressionStream = testDecompressionStream();
   }
+  // console.log("hi", buffer);
   return supportsDecompressionStream
     ? browserInflate(buffer)
-    : pako.inflate(buffer)
+    : pako.inflate(buffer);
 }
 
 async function browserInflate(buffer) {
-  const ds = new DecompressionStream('deflate')
-  const d = new Blob([buffer]).stream().pipeThrough(ds)
-  return new Uint8Array(await new Response(d).arrayBuffer())
+  const ds = new DecompressionStream("deflate");
+  const d = new Blob([buffer]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(d).arrayBuffer());
 }
 
 function testDecompressionStream() {
   try {
-    const ds = new DecompressionStream('deflate')
-    if (ds) return true
+    const ds = new DecompressionStream("deflate");
+    if (ds) return true;
   } catch (_) {
     // no bother
   }
-  return false
+  return false;
 }
