@@ -28,12 +28,6 @@ export class GitExec {
     const stdout = await this.lsTree({ ref, dir });
     const oid = await git.resolveRef({ fs, dir, ref: ref });
     const commit = await git.readCommit({ fs: fs, dir, oid });
-    // const commitCompressed = await this.writeCommit({
-    //   commit,
-    //   dir,
-    //   expectedOid: oid,
-    // });
-    // console.log("got commit", commit);
 
     const treeResult = await this.buildTree2({
       stdout,
@@ -103,6 +97,13 @@ export class GitExec {
         }
       }
     }
+    await this.database._db
+      .insert(schema.refs)
+      .values({ name: ref, sha: oid, type: "branch" })
+      .onConflictDoUpdate({
+        target: schema.refs.name,
+        set: { name: ref },
+      });
     console.log("done cloning", count);
   }
 

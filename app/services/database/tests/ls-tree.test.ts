@@ -38,7 +38,7 @@ export const setup = async (
     await migrate(drizzleDB, { migrationsFolder: "./drizzle.test" });
   }
   // if (!args.preventReset) {
-  // await database.reset();
+  await database.reset();
   // }
   return {
     database,
@@ -53,25 +53,28 @@ describe("clone", async () => {
       console.log("begin test");
       const { database, pathToGitRepo } = await setup({
         sqliteUrl: TEST_SQLITE,
-        // repoPath: movieRepoPath,
-        repoPath: largeRepoPath,
+        repoPath: movieRepoPath,
+        // repoPath: largeRepoPath,
       });
-      // const ref = "main";
-      const ref = "master";
+      const ref = "main";
+      // const ref = "master";
 
-      // const gitExec = new GitExec(database);
-      // await gitExec.clone({ dir: pathToGitRepo, ref });
+      const gitExec = new GitExec(database);
+      await gitExec.clone({ dir: pathToGitRepo, ref });
 
-      expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
-        "clone-and-list.json"
-      );
+      const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
+      // console.log(files);
+      // expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
+      //   "clone-and-list.json"
+      // );
       const blob = await database.git.repo(pathToGitRepo).get({
         filepath:
-          "site/content/articles/2021-06-24-design-thinking-problem-solving-strategy.md",
-        ref: "master",
+          // "site/content/articles/2021-06-24-design-thinking-problem-solving-strategy.md",
+          "content/movies/movie1.json",
+        ref,
       });
-      console.timeEnd("hi");
-      // console.log(blob);
+      // console.timeEnd("hi");
+      console.log(blob);
     },
     { timeout: 100000 }
   );

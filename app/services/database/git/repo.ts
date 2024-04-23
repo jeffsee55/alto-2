@@ -244,8 +244,13 @@ export class Repo {
   }
 
   async listFiles(args: { ref: string }) {
-    const tree = await this.drizzleDB.query.trees.findFirst();
-    const json = JSON.parse(tree?.lsTree || "");
+    const refRecord = await this.drizzleDB.query.refs.findFirst({
+      where: (fields, ops) => ops.eq(fields.name, args.ref),
+      with: {
+        tree: true,
+      },
+    });
+    const json = JSON.parse(refRecord?.tree?.lsTree || "");
     return Object.keys(json);
     // const cache = {};
     // const res = await git.listFiles({
@@ -350,10 +355,17 @@ export class Repo {
     ref: string;
     cache?: object;
   }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
-    const tree = await this.drizzleDB.query.trees.findFirst({
-      columns: { lsTree: true },
+    const refRecord = await this.drizzleDB.query.refs.findFirst({
+      where: (fields, ops) => ops.eq(fields.name, args.ref),
+      with: {
+        tree: { columns: { lsTree: true } },
+      },
     });
-    const parsedTree = JSON.parse(tree?.lsTree || "");
+    const json = JSON.parse(refRecord?.tree?.lsTree || "");
+    // const tree = await this.drizzleDB.query.trees.findFirst({
+    //   columns: { lsTree: true },
+    // });
+    const parsedTree = json;
     // console.log(parsedTree);
     const sha = parsedTree[args.filepath];
     if (!sha) {
@@ -364,25 +376,6 @@ export class Repo {
     return this.drizzleDB.query.blobs.findFirst({
       where: (fields, ops) => ops.eq(fields.sha, sha),
     });
-    return {};
-    const oid = await git.resolveRef({
-      fs: await this.getFs(),
-      dir: this.dir,
-      ref: args.ref,
-    });
-    const { blob, oid: blobOid } = await git.readBlob({
-      fs: await this.getFs(),
-      dir: this.dir,
-      oid,
-      filepath: args.filepath,
-      cache: args.cache,
-    });
-    const string = Buffer.from(blob).toString("utf8");
-    return {
-      blob: blob,
-      string,
-      sha: blobOid,
-    };
   }
 
   async init(args: Omit<Parameters<typeof git.init>[0], "fs" | "dir">) {

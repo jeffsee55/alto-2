@@ -52,6 +52,18 @@ export const trees = sqliteTable("trees", {
   lsTreeReversed: text("ls_tree_reversed").notNull(),
 });
 
+export const refs = sqliteTable("refs", {
+  name: text("name").primaryKey().notNull(),
+  sha: text("sha").notNull(),
+  type: text("type").notNull(),
+});
+export const refRelations = relations(refs, ({ one }) => ({
+  tree: one(trees, {
+    fields: [refs.sha],
+    references: [trees.sha],
+  }),
+}));
+
 export const blobs = sqliteTable("blobs", {
   sha: text("sha").primaryKey().notNull(),
   content: text("content").notNull(),
@@ -340,6 +352,8 @@ export const schema = {
   documentsRelations,
   references,
   repos,
+  refs,
+  refRelations,
   documentsToDocumentsRelations,
   files,
   fileParts,
