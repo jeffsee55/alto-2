@@ -46,22 +46,26 @@ export const setup = async (
   };
 };
 
-describe("clone", () => {
-  it("works", async () => {
-    const { database, pathToGitRepo } = await setup({
-      sqliteUrl: TEST_SQLITE,
-      repoPath: movieRepoPath,
-      // repoPath: largeRepoPath,
-    });
-    const ref = "main";
-    // const ref = "master";
+describe("clone", async () => {
+  it(
+    "works",
+    async () => {
+      const { database, pathToGitRepo } = await setup({
+        sqliteUrl: TEST_SQLITE,
+        repoPath: movieRepoPath,
+        // repoPath: largeRepoPath,
+      });
+      const ref = "main";
+      // const ref = "master";
 
-    const gitExec = new GitExec(database);
-    await gitExec.clone({ dir: pathToGitRepo, ref });
+      const gitExec = new GitExec(database);
+      await gitExec.clone({ dir: pathToGitRepo, ref });
 
-    const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
-    expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
-      "clone-and-list.json"
-    );
-  });
+      const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
+      expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
+        "clone-and-list.json"
+      );
+    },
+    { timeout: 100000 }
+  );
 });

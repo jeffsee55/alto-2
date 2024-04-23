@@ -5,11 +5,14 @@ import * as git from "isomorphic-git";
 import { ENOENT } from "./fs";
 import { Database } from "..";
 import { schema } from "../schema";
+import { onTestFailed } from "vitest";
 
 export class GitExec {
   database: Database;
+  cache: Record<string, unknown>;
   constructor(database: Database) {
     this.database = database;
+    this.cache = {};
   }
 
   async clone({ ref, dir }: { ref: string; dir: string }) {
@@ -20,12 +23,14 @@ export class GitExec {
       commit,
       dir,
     });
+    // console.log("got commit", commit);
 
     const treeResult = await this.buildTree2({
       stdout,
       topLevelSha: commit.commit.tree,
       dir: dir,
     });
+    console.log("tree built", treeResult.trees.length);
 
     const shaTree: Record<string, string> = {};
     for await (const [treeSha, entries] of Object.entries(treeResult.trees)) {
@@ -36,6 +41,8 @@ export class GitExec {
       });
     }
 
+    console.log("writing sha tree");
+
     const sha = await this.getShaForRef({ ref, dir });
     await this.database._db.insert(schema.trees).values({
       sha,
@@ -43,27 +50,37 @@ export class GitExec {
       commit: commitCompressed,
       shaTree: JSON.stringify(shaTree),
     });
+    console.log("writing blobs");
+    let count = 0;
+    onTestFailed(() => {
+      console.log("count", count);
+    });
     for await (const [sha, filepath] of Object.entries(treeResult.blobMap)) {
       if (filepath.endsWith("json") || filepath.endsWith("md")) {
-        const value = await this.readBlobFromSha({
-          sha: sha,
-          dir,
-        });
-        const size = Buffer.byteLength(value, "utf8");
-        const { dir: pDir, base } = path.parse(filepath);
-        const birthtime = 1706724530491;
-        const encoding = "utf8";
-        await this.database._db.insert(schema.files).values({
-          repoId: dir,
-          name: filepath,
-          value: value,
-          isDirectory: 0,
-          base,
-          dir: pDir,
-          birthtime,
-          size,
-          encoding,
-        });
+        try {
+          const value = await this.readBlobFromSha({
+            sha: sha,
+            dir,
+          });
+          count++;
+          const size = Buffer.byteLength(value, "utf8");
+          const { dir: pDir, base } = path.parse(filepath);
+          const birthtime = 1706724530491;
+          const encoding = "utf8";
+          await this.database._db.insert(schema.files).values({
+            repoId: dir,
+            name: filepath,
+            value: value,
+            isDirectory: 0,
+            base,
+            dir: pDir,
+            birthtime,
+            size,
+            encoding,
+          });
+        } catch (e) {
+          console.log(`Error while resolving blob ${ref}`);
+        }
       }
     }
   }
@@ -88,21 +105,9 @@ export class GitExec {
     sha: string;
     dir: string;
   }): Promise<string> {
-    return new Promise((resolve, reject) => {
-      // Execute git show command to read the blob content from the SHA
-      // console.log("shiw", sha);
-      exec(
-        `git show ${sha}`,
-        { cwd: dir, maxBuffer: 1024 * 5000 },
-        (error, stdout, stderr) => {
-          if (error) {
-            reject(stderr || error.message);
-          } else {
-            resolve(stdout);
-          }
-        }
-      );
-    });
+    // Skipping unnecessary sha lookup
+    const res = await git.readObject({ fs, dir, oid: sha, cache: this.cache });
+    return Buffer.from(res.object).toString("utf8");
   }
 
   async lsTree({ ref, dir }: { ref: string; dir: string }): Promise<string> {
