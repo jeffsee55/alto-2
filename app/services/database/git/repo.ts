@@ -244,14 +244,17 @@ export class Repo {
   }
 
   async listFiles(args: { ref: string }) {
-    const cache = {};
-    const res = await git.listFiles({
-      fs: await this.getFs(),
-      dir: this.dir,
-      ref: args.ref,
-      cache,
-    });
-    return res;
+    const tree = await this.drizzleDB.query.trees.findFirst();
+    const json = JSON.parse(tree?.lsTree || "");
+    return Object.keys(json);
+    // const cache = {};
+    // const res = await git.listFiles({
+    //   fs: await this.getFs(),
+    //   dir: this.dir,
+    //   ref: args.ref,
+    //   cache,
+    // });
+    // return res;
   }
   async status(args: Omit<Parameters<typeof git.status>[0], "fs" | "dir">) {
     return git.status({
@@ -347,6 +350,21 @@ export class Repo {
     ref: string;
     cache?: object;
   }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
+    const tree = await this.drizzleDB.query.trees.findFirst({
+      columns: { lsTree: true },
+    });
+    const parsedTree = JSON.parse(tree?.lsTree || "");
+    // console.log(parsedTree);
+    const sha = parsedTree[args.filepath];
+    if (!sha) {
+      throw new Error(
+        `Unable to find blob for ${args.filepath} and ref ${args.ref}`
+      );
+    }
+    return this.drizzleDB.query.blobs.findFirst({
+      where: (fields, ops) => ops.eq(fields.sha, sha),
+    });
+    return {};
     const oid = await git.resolveRef({
       fs: await this.getFs(),
       dir: this.dir,

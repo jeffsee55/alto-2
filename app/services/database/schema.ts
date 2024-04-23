@@ -48,6 +48,13 @@ export const trees = sqliteTable("trees", {
   content: text("content").notNull(),
   commit: text("commit").notNull(),
   shaTree: text("sha_tree").notNull(),
+  lsTree: text("ls_tree").notNull(),
+  lsTreeReversed: text("ls_tree_reversed").notNull(),
+});
+
+export const blobs = sqliteTable("blobs", {
+  sha: text("sha").primaryKey().notNull(),
+  content: text("content").notNull(),
 });
 
 export const files = sqliteTable(
@@ -338,4 +345,5 @@ export const schema = {
   fileParts,
   filters,
   trees,
+  blobs,
 };

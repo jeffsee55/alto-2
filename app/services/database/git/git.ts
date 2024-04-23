@@ -6,6 +6,15 @@ import { ENOENT } from "./fs";
 import { Database } from "..";
 import { schema } from "../schema";
 import { expect, onTestFailed } from "vitest";
+import zlib from "zlib";
+import pako from "pako";
+import { GitTree } from "~/services/isomorphic-git/src/models/GitTree";
+import { _writeObject } from "~/services/isomorphic-git/src/storage/writeObject";
+import { shasum } from "~/services/isomorphic-git/src/utils/shasum";
+import { GitObject } from "~/services/isomorphic-git/src/models/GitObject";
+import crypto from "crypto";
+import { toHex } from "~/services/isomorphic-git/src/utils/toHex";
+import { GitCommit } from "~/services/isomorphic-git/src/models/GitCommit";
 
 export class GitExec {
   database: Database;
@@ -19,10 +28,11 @@ export class GitExec {
     const stdout = await this.lsTree({ ref, dir });
     const oid = await git.resolveRef({ fs, dir, ref: ref });
     const commit = await git.readCommit({ fs: fs, dir, oid });
-    const commitCompressed = await this.writeCommit({
-      commit,
-      dir,
-    });
+    // const commitCompressed = await this.writeCommit({
+    //   commit,
+    //   dir,
+    //   expectedOid: oid,
+    // });
     // console.log("got commit", commit);
 
     const treeResult = await this.buildTree2({
@@ -30,7 +40,7 @@ export class GitExec {
       topLevelSha: commit.commit.tree,
       dir: dir,
     });
-    console.log("tree built", treeResult.trees.length);
+    console.log("tree built", Object.keys(treeResult.trees).length);
 
     const shaTree: Record<string, string> = {};
     for await (const [treeSha, entries] of Object.entries(treeResult.trees)) {
@@ -44,12 +54,18 @@ export class GitExec {
     console.log("writing sha tree");
 
     const sha = await this.getShaForRef({ ref, dir });
-    await this.database._db.insert(schema.trees).values({
-      sha,
-      content: JSON.stringify(treeResult.tree),
-      commit: commitCompressed,
-      shaTree: JSON.stringify(shaTree),
-    });
+    try {
+      await this.database._db.insert(schema.trees).values({
+        sha,
+        content: JSON.stringify(treeResult.tree),
+        commit: "nothing",
+        lsTree: JSON.stringify(treeResult.lsTree),
+        lsTreeReversed: JSON.stringify(treeResult.lsTreeReversed),
+        shaTree: JSON.stringify(shaTree),
+      });
+    } catch (e) {
+      console.log(e);
+    }
     console.log("writing blobs");
     let count = 0;
     onTestFailed(() => {
@@ -67,6 +83,10 @@ export class GitExec {
           const { dir: pDir, base } = path.parse(filepath);
           const birthtime = 1706724530491;
           const encoding = "utf8";
+          await this.database._db.insert(schema.blobs).values({
+            sha: sha,
+            content: value,
+          });
           await this.database._db.insert(schema.files).values({
             repoId: dir,
             name: filepath,
@@ -83,6 +103,7 @@ export class GitExec {
         }
       }
     }
+    console.log("done cloning", count);
   }
 
   getShaForRef({ ref, dir }: { ref: string; dir: string }): Promise<string> {
@@ -165,49 +186,15 @@ export class GitExec {
     }[];
     dir: string;
   }) {
-    let buffer = "";
-    await git.writeTree({
-      tree: entryShas,
-      fs: {
-        promises: {
-          ...fs.promises,
-          stat: async (...args: Parameters<typeof fs.promises.stat>) => {
-            throw new ENOENT(args[0].toString());
-          },
-          lstat: async (...args: Parameters<typeof fs.promises.lstat>) => {
-            throw new ENOENT(args[0].toString());
-          },
-          writeFile: async (...args: Parameters<typeof fs.promises.lstat>) => {
-            const outputSha = args[0]
-              .toString()
-              .split(".git/objects/")[1]
-              .replace("/", "");
-            if (expectedSha !== outputSha) {
-              // console.log("`unmatched tree", expectedSha, outputSha);
-              // console.dir(entryShas.slice(0, 10), { depth: null });
-              const stdout = await this.catFileP({ ref: expectedSha, dir });
-              const lines = stdout.trim().split("\n");
-              const jsonLines: ObjectInfo[] = [];
-              lines.forEach((line) => {
-                const [mode, type, rest] = line.split(" ");
-                const [oid, path] = rest.split("\t");
-                if (type === "blob" || type === "tree") {
-                  // jsonLines.push({ mode, type, oid, path });
-                  jsonLines.push(oid);
-                }
-              });
-              expect(jsonLines).toMatchObject(entryShas.map((s) => s.oid));
-              // throw new Error(`unmatched tree ${expectedSha}: ${outputSha}`);
-            }
-            if (args[1] instanceof Buffer) {
-              buffer = args[1]?.toString("base64");
-            }
-          },
-        },
-      },
-      dir,
-    });
-    return buffer;
+    const gitTree = new GitTree(entryShas);
+    const gitTreeObject = gitTree.toObject();
+    const object = GitObject.wrap({ type: "tree", object: gitTreeObject });
+    const oid2 = await shasum(object);
+    if (expectedSha !== oid2) {
+      throw new Error(`Expected sha mismatch ${expectedSha} : ${oid2}`);
+    }
+    return gitTreeObject;
+    // return buffer;
   }
 
   async buildTree2({
@@ -221,11 +208,16 @@ export class GitExec {
     dir: string;
   }) {
     const lines = stdout.trim().split("\n");
+    const lsTree: Record<string, string> = {};
+    const lsTreeReversed: Record<string, string> = {};
     const jsonLines: ObjectInfo[] = [];
     lines.forEach((line) => {
-      const [mode, type, rest] = line.split(" ");
-      const [sha, filepath] = rest.split("\t");
+      const [ok, filepathDirty] = line.split("\t");
+      const [mode, type, sha] = ok.split(" ");
+      const filepath = filepathDirty.replace(/^"|"$/g, "");
       if (type === "blob" || type === "tree") {
+        lsTree[filepath] = sha;
+        lsTreeReversed[sha] = filepath;
         jsonLines.push({ mode, type, sha, filepath });
       }
     });
@@ -272,6 +264,11 @@ export class GitExec {
           if (part.endsWith(`"`) && !part.startsWith(`"`)) {
             console.log(line);
           }
+          if (line.filepath.includes("manage-content-wordpress")) {
+            // line.filepath = `"${line.filepath}"`;
+            part = "2019-11-07-еxploring-new-ways-manage-content-wordpress.md";
+            // part = `"${part}"`;
+          }
           trees[currentTree.sha].push({
             mode: line.mode,
             path: part,
@@ -295,62 +292,36 @@ export class GitExec {
         entryShas,
       });
     }
-    return { tree: topLevelTree, trees, treeMap, blobMap };
+    return {
+      tree: topLevelTree,
+      trees,
+      treeMap,
+      blobMap,
+      lsTree,
+      lsTreeReversed,
+    };
   }
   async writeCommit({
-    commit,
     dir,
+    expectedOid,
   }: {
+    expectedOid: string;
     dir: string;
-    commit: {
-      commit: {
-        parent: string[];
-        author: {
-          name: string;
-          email: string;
-          timestamp: number;
-          timezoneOffset: number;
-          tree: string;
-        };
-        committer: {
-          name: string;
-          email: string;
-          timestamp: number;
-          timezoneOffset: number;
-          tree: string;
-        };
-        message: string;
-        tree: string;
-      };
-    };
   }) {
     let commitCompressed: string = "";
+    const oid = await git.resolveRef({ fs, dir, ref: "master" });
+    const commit = await git.readCommit({ fs, dir, oid });
+    const gitCommit = GitCommit.from(commit.commit);
+    const gitCommitObject = gitCommit.toObject();
+    const object = GitObject.wrap({ type: "commit", object: gitCommitObject });
+    const oid2 = await shasum(object);
+    console.log(commit.commit);
 
-    await git.writeCommit({
-      commit: {
-        ...commit.commit,
-        message: commit.commit.message.trim(),
-      },
-      fs: {
-        promises: {
-          ...fs.promises,
-          stat: async (...args: Parameters<typeof fs.promises.stat>) => {
-            throw new ENOENT(args[0].toString());
-          },
-          lstat: async (...args: Parameters<typeof fs.promises.lstat>) => {
-            throw new ENOENT(args[0].toString());
-          },
-          writeFile: async (
-            ...args: Parameters<typeof fs.promises.writeFile>
-          ) => {
-            if (args[1] instanceof Buffer) {
-              commitCompressed = args[1].toString("base64");
-            }
-          },
-        },
-      },
-      dir: dir,
-    });
+    // console.log(oid, commit.oid, oid2);
+    if (oid2 !== commit.oid) {
+      console.log("oh no!", oid2);
+      throw new Error(`Commit sha mismatch ${expectedOid} : ${oid2}`);
+    }
     return commitCompressed;
   }
 }

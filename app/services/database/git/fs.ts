@@ -147,12 +147,13 @@ export const createFs = async (
       },
       readFile: async (...args: Parameters<typeof fs.promises.readFile>) => {
         const { name } = splitAtGit(args[0].toString());
-        if (name === ".git/main") {
+        if (name === `.git/${"master"}`) {
           return tree.sha;
         }
         if (name.startsWith(".git/objects/")) {
           const sha = name.replace(".git/objects/", "").replace("/", "");
           if (sha === tree.sha) {
+            console.log("returning sha");
             return Buffer.from(tree.commit, "base64");
           }
           const res = JSON.parse(tree.shaTree)[sha];

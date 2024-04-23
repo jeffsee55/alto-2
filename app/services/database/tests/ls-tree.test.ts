@@ -37,9 +37,9 @@ export const setup = async (
   if (args.sqliteUrl === ":memory:") {
     await migrate(drizzleDB, { migrationsFolder: "./drizzle.test" });
   }
-  if (!args.preventReset) {
-    await database.reset();
-  }
+  // if (!args.preventReset) {
+  // await database.reset();
+  // }
   return {
     database,
     pathToGitRepo,
@@ -50,21 +50,28 @@ describe("clone", async () => {
   it(
     "works",
     async () => {
+      console.log("begin test");
       const { database, pathToGitRepo } = await setup({
         sqliteUrl: TEST_SQLITE,
-        repoPath: movieRepoPath,
+        // repoPath: movieRepoPath,
         repoPath: largeRepoPath,
       });
       // const ref = "main";
       const ref = "master";
 
-      const gitExec = new GitExec(database);
-      await gitExec.clone({ dir: pathToGitRepo, ref });
+      // const gitExec = new GitExec(database);
+      // await gitExec.clone({ dir: pathToGitRepo, ref });
 
-      const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
       expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
         "clone-and-list.json"
       );
+      const blob = await database.git.repo(pathToGitRepo).get({
+        filepath:
+          "site/content/articles/2021-06-24-design-thinking-problem-solving-strategy.md",
+        ref: "master",
+      });
+      console.timeEnd("hi");
+      // console.log(blob);
     },
     { timeout: 100000 }
   );

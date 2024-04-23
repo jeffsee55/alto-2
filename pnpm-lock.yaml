@@ -48,7 +48,7 @@ dependencies:
     specifier: ^1.0.0
     version: 1.0.0
   pako:
-    specifier: ^1.0.10
+    specifier: ^1.0.11
     version: 1.0.11
   pify:
     specifier: ^4.0.1
