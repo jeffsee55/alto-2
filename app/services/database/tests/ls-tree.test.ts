@@ -53,10 +53,10 @@ describe("clone", async () => {
       const { database, pathToGitRepo } = await setup({
         sqliteUrl: TEST_SQLITE,
         repoPath: movieRepoPath,
-        // repoPath: largeRepoPath,
+        repoPath: largeRepoPath,
       });
-      const ref = "main";
-      // const ref = "master";
+      // const ref = "main";
+      const ref = "master";
 
       const gitExec = new GitExec(database);
       await gitExec.clone({ dir: pathToGitRepo, ref });

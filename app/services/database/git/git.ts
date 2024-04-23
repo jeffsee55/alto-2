@@ -5,7 +5,7 @@ import * as git from "isomorphic-git";
 import { ENOENT } from "./fs";
 import { Database } from "..";
 import { schema } from "../schema";
-import { onTestFailed } from "vitest";
+import { expect, onTestFailed } from "vitest";
 
 export class GitExec {
   database: Database;
@@ -106,10 +106,31 @@ export class GitExec {
     dir: string;
   }): Promise<string> {
     // Skipping unnecessary sha lookup
+    // this is extremely fast when the objects are coming from a
+    // pack file because the cache holds them in memory
     const res = await git.readObject({ fs, dir, oid: sha, cache: this.cache });
     return Buffer.from(res.object).toString("utf8");
   }
 
+  async catFileP({ ref, dir }: { ref: string; dir: string }): Promise<string> {
+    return new Promise((resolve, reject) => {
+      exec(
+        `git cat-file -p ${ref}`,
+        { cwd: dir, maxBuffer: 1024 * 5000 },
+        async (error, stdout, stderr) => {
+          if (error) {
+            reject(`Error listing branches: ${error}`);
+            return;
+          }
+          if (stderr) {
+            reject(`Git stderr: ${stderr}`);
+            return;
+          }
+          resolve(stdout);
+        }
+      );
+    });
+  }
   async lsTree({ ref, dir }: { ref: string; dir: string }): Promise<string> {
     return new Promise((resolve, reject) => {
       exec(
@@ -162,8 +183,21 @@ export class GitExec {
               .split(".git/objects/")[1]
               .replace("/", "");
             if (expectedSha !== outputSha) {
-              console.log("`unmatched tree", expectedSha, outputSha);
-              console.dir(entryShas, { depth: null });
+              // console.log("`unmatched tree", expectedSha, outputSha);
+              // console.dir(entryShas.slice(0, 10), { depth: null });
+              const stdout = await this.catFileP({ ref: expectedSha, dir });
+              const lines = stdout.trim().split("\n");
+              const jsonLines: ObjectInfo[] = [];
+              lines.forEach((line) => {
+                const [mode, type, rest] = line.split(" ");
+                const [oid, path] = rest.split("\t");
+                if (type === "blob" || type === "tree") {
+                  // jsonLines.push({ mode, type, oid, path });
+                  jsonLines.push(oid);
+                }
+              });
+              expect(jsonLines).toMatchObject(entryShas.map((s) => s.oid));
+              // throw new Error(`unmatched tree ${expectedSha}: ${outputSha}`);
             }
             if (args[1] instanceof Buffer) {
               buffer = args[1]?.toString("base64");
@@ -215,7 +249,7 @@ export class GitExec {
     > = { [topLevelSha]: [] };
     jsonLines.forEach((line) => {
       let currentTree = topLevelTree;
-      const pathParts = line.filepath.split("/");
+      const pathParts = line.filepath.split(path.sep);
       pathParts.map((part, i) => {
         if (i === pathParts.length - 1) {
           // we'r at the end
@@ -234,6 +268,9 @@ export class GitExec {
           }
           if (line.type === "blob") {
             blobMap[line.sha] = line.filepath;
+          }
+          if (part.endsWith(`"`) && !part.startsWith(`"`)) {
+            console.log(line);
           }
           trees[currentTree.sha].push({
             mode: line.mode,
