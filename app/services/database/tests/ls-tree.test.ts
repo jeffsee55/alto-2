@@ -65,15 +65,16 @@ describe("clone", async () => {
       const repo = database.git.repo(pathToGitRepo);
 
       const files = await repo.listFiles({ ref });
-      // expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
-      //   "clone-and-list.json"
-      // );
+      expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
+        "clone-and-list.json"
+      );
       const blob = await repo.get({
         filepath:
           // "site/content/articles/2021-06-24-design-thinking-problem-solving-strategy.md",
           "content/movies/movie1.json",
         ref,
       });
+      console.log(blob);
       // console.timeEnd("hi");
       await repo.add({
         filepath: "content/movies/movie1.json",

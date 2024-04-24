@@ -50,7 +50,7 @@ export class GitExec {
     const sha = await this.getShaForRef({ ref, dir });
     try {
       await this.database._db.insert(schema.trees).values({
-        sha,
+        sha: commit.commit.tree,
         content: JSON.stringify(treeResult.tree),
         commit: "nothing",
         lsTree: JSON.stringify(treeResult.lsTree),
@@ -99,7 +99,7 @@ export class GitExec {
     }
     await this.database._db
       .insert(schema.refs)
-      .values({ name: ref, sha: oid, type: "branch" })
+      .values({ name: ref, sha: commit.commit.tree, type: "branch" })
       .onConflictDoUpdate({
         target: schema.refs.name,
         set: { name: ref },
@@ -212,6 +212,12 @@ export class GitExec {
     const lsTree: Record<string, string> = {};
     const lsTreeReversed: Record<string, string> = {};
     const jsonLines: ObjectInfo[] = [];
+    const treeEntries: {
+      treeSha: string;
+      sha;
+      filepath: string;
+      type: string;
+    }[] = [];
     lines.forEach((line) => {
       const [ok, filepathDirty] = line.split("\t");
       const [mode, type, sha] = ok.split(" ");
@@ -220,8 +226,15 @@ export class GitExec {
         lsTree[filepath] = sha;
         lsTreeReversed[sha] = filepath;
         jsonLines.push({ mode, type, sha, filepath });
+        treeEntries.push({ treeSha: topLevelSha, type, sha, filepath });
       }
     });
+    // console.log(jsonLines);
+    for (let i = 0; i < treeEntries.length; i += 1000) {
+      const chunk = treeEntries.slice(i, i + 1000);
+      await this.database._db.insert(schema.treeEntries).values(chunk);
+      // await processChunk(chunk);
+    }
     const treeMap: Record<string, string> = {};
     const blobMap: Record<string, string> = {};
     const topLevelTree: TreeNode = {

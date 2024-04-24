@@ -1,6 +1,6 @@
 import * as git from "~/services/isomorphic-git/src/index.js";
 import isoHTTP from "~/services/isomorphic-git/src/http/node";
-import { schema } from "~/services/database/schema";
+import { schema, treeEntries } from "~/services/database/schema";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { createGitURL } from "./git-server";
 import { createFs } from "./fs";
@@ -252,29 +252,22 @@ export class Repo {
         tree: { columns: { lsTree: true } },
       },
     });
-    const json = JSON.parse(refRecord?.tree?.lsTree || "");
-    console.log(json);
+    // const json = JSON.parse(refRecord?.tree?.lsTree || "");
+    // console.log(json);
 
     // step 4. point the ref to the new record
   }
 
   async listFiles(args: { ref: string }) {
-    const refRecord = await this.drizzleDB.query.refs.findFirst({
-      where: (fields, ops) => ops.eq(fields.name, args.ref),
-      with: {
-        tree: true,
-      },
-    });
-    const json = JSON.parse(refRecord?.tree?.lsTree || "");
-    return Object.keys(json);
-    // const cache = {};
-    // const res = await git.listFiles({
-    //   fs: await this.getFs(),
-    //   dir: this.dir,
-    //   ref: args.ref,
-    //   cache,
-    // });
-    // return res;
+    const select = await this.drizzleDB
+      .select({ filepath: treeEntries.filepath })
+      .from(schema.treeEntries)
+      .innerJoin(schema.trees, eq(schema.treeEntries.treeSha, schema.trees.sha))
+      .innerJoin(schema.refs, eq(schema.trees.sha, schema.refs.sha))
+      .where(
+        and(eq(schema.refs.name, args.ref), eq(schema.treeEntries.type, "blob"))
+      );
+    return select.map((item) => item.filepath);
   }
   async status(args: Omit<Parameters<typeof git.status>[0], "fs" | "dir">) {
     return git.status({
@@ -370,30 +363,27 @@ export class Repo {
     ref: string;
     cache?: object;
   }): Promise<{ content: string; sha: string; filepath: string; ref: string }> {
-    const refRecord = await this.drizzleDB.query.refs.findFirst({
-      where: (fields, ops) => ops.eq(fields.name, args.ref),
-      with: {
-        tree: { columns: { lsTree: true } },
-      },
-    });
-    const json = JSON.parse(refRecord?.tree?.lsTree || "");
-    // const tree = await this.drizzleDB.query.trees.findFirst({
-    //   columns: { lsTree: true },
-    // });
-    const parsedTree = json;
-    // console.log(parsedTree);
-    const sha = parsedTree[args.filepath];
-    if (!sha) {
-      throw new Error(
-        `Unable to find blob for ${args.filepath} and ref ${args.ref}`
+    const select = this.drizzleDB
+      .select({ sha: schema.blobs.sha })
+      .from(schema.blobs)
+      .innerJoin(
+        schema.treeEntries,
+        eq(schema.blobs.sha, schema.treeEntries.sha)
+      )
+      .innerJoin(schema.trees, eq(schema.treeEntries.treeSha, schema.trees.sha))
+      .innerJoin(schema.refs, eq(schema.trees.sha, schema.refs.sha))
+      .where(
+        and(
+          eq(schema.refs.name, args.ref),
+          eq(schema.treeEntries.filepath, args.filepath)
+        )
       );
-    }
-    const result = await this.drizzleDB.query.blobs.findFirst({
-      where: (fields, ops) => ops.eq(fields.sha, sha),
-    });
 
-    if (result) {
-      return { ...result, filepath: args.filepath, ref: args.ref };
+    const res2 = await this.drizzleDB.query.blobs.findFirst({
+      where: (fields, ops) => ops.eq(fields.sha, select),
+    });
+    if (res2) {
+      return { ...res2, filepath: args.filepath, ref: args.ref };
     }
     throw new Error(
       `Unable to find record for filepath: "${args.filepath}" ref: "${args.ref}"`
