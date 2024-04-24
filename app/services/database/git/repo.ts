@@ -5,6 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { createGitURL } from "./git-server";
 import { createFs } from "./fs";
 import { and, eq, like, not } from "drizzle-orm";
+import crypto from "crypto";
 
 export class Repo {
   drizzleDB: BetterSQLite3Database<typeof schema>;
@@ -235,12 +236,26 @@ export class Repo {
     // console.log(commit);
   }
 
-  async add(args: Omit<Parameters<typeof git.add>[0], "fs" | "dir">) {
-    return git.add({
-      fs: await this.getFs(),
-      dir: this.dir,
-      ...args,
+  async add(args: { ref: string; filepath: string; content: string }) {
+    console.log("add", args);
+    // step 1. Calculate the sha
+    const sha = crypto.createHash("md5").update(args.content).digest("hex");
+    // step 2. Add the blob to the database
+    await this.drizzleDB.insert(schema.blobs).values({
+      sha,
+      content: args.content,
     });
+    // step 3. create a new tree record
+    const refRecord = await this.drizzleDB.query.refs.findFirst({
+      where: (fields, ops) => ops.eq(fields.name, args.ref),
+      with: {
+        tree: { columns: { lsTree: true } },
+      },
+    });
+    const json = JSON.parse(refRecord?.tree?.lsTree || "");
+    console.log(json);
+
+    // step 4. point the ref to the new record
   }
 
   async listFiles(args: { ref: string }) {
@@ -354,7 +369,7 @@ export class Repo {
     filepath: string;
     ref: string;
     cache?: object;
-  }): Promise<{ blob: Uint8Array; string: string; sha: string }> {
+  }): Promise<{ content: string; sha: string; filepath: string; ref: string }> {
     const refRecord = await this.drizzleDB.query.refs.findFirst({
       where: (fields, ops) => ops.eq(fields.name, args.ref),
       with: {
@@ -373,9 +388,16 @@ export class Repo {
         `Unable to find blob for ${args.filepath} and ref ${args.ref}`
       );
     }
-    return this.drizzleDB.query.blobs.findFirst({
+    const result = await this.drizzleDB.query.blobs.findFirst({
       where: (fields, ops) => ops.eq(fields.sha, sha),
     });
+
+    if (result) {
+      return { ...result, filepath: args.filepath, ref: args.ref };
+    }
+    throw new Error(
+      `Unable to find record for filepath: "${args.filepath}" ref: "${args.ref}"`
+    );
   }
 
   async init(args: Omit<Parameters<typeof git.init>[0], "fs" | "dir">) {

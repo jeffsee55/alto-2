@@ -62,19 +62,25 @@ describe("clone", async () => {
       const gitExec = new GitExec(database);
       await gitExec.clone({ dir: pathToGitRepo, ref });
 
-      const files = await database.git.repo(pathToGitRepo).listFiles({ ref });
-      // console.log(files);
+      const repo = database.git.repo(pathToGitRepo);
+
+      const files = await repo.listFiles({ ref });
       // expect(JSON.stringify(files, null, 2)).toMatchFileSnapshot(
       //   "clone-and-list.json"
       // );
-      const blob = await database.git.repo(pathToGitRepo).get({
+      const blob = await repo.get({
         filepath:
           // "site/content/articles/2021-06-24-design-thinking-problem-solving-strategy.md",
           "content/movies/movie1.json",
         ref,
       });
       // console.timeEnd("hi");
-      console.log(blob);
+      await repo.add({
+        filepath: "content/movies/movie1.json",
+        ref,
+        content: JSON.stringify({ title: "test" }, null, 2),
+      });
+      // console.log(blob);
     },
     { timeout: 100000 }
   );
