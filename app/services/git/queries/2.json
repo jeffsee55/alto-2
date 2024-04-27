@@ -4,38 +4,30 @@
   "refs": [
     {
       "name": "main",
-      "commit": "some-commit-oid",
+      "commit": "some-commit-oid-2",
       "repoName": "movie-content",
       "org": "jeffsee55",
       "blobsToRefs": [
         {
-          "blobOid": "some-blob-oid",
+          "blobOid": "blob-oid-1",
+          "path": "content/movie1.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "refName": "main",
           "blob": {
-            "oid": "some-blob-oid",
-            "content": "some-blob-content"
+            "oid": "blob-oid-1",
+            "content": "blob-oid-1-content"
           }
         },
         {
-          "blobOid": "some-other-blob-oid",
+          "blobOid": "blob-oid-3",
+          "path": "content/movie2.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "refName": "main",
           "blob": {
-            "oid": "some-other-blob-oid",
-            "content": "some-other-blob-content"
-          }
-        },
-        {
-          "blobOid": "some-other-blob-oid-2",
-          "org": "jeffsee55",
-          "repoName": "movie-content",
-          "refName": "main",
-          "blob": {
-            "oid": "some-other-blob-oid-2",
-            "content": "some-other-blob-content-2"
+            "oid": "blob-oid-3",
+            "content": "blob-oid-3-content"
           }
         }
       ]

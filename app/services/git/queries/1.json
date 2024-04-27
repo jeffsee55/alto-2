@@ -9,25 +9,25 @@
       "org": "jeffsee55",
       "blobsToRefs": [
         {
-          "blobOid": "some-blob-oid",
+          "blobOid": "blob-oid-1",
           "path": "content/movie1.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "refName": "main",
           "blob": {
-            "oid": "some-blob-oid",
-            "content": "some-blob-content"
+            "oid": "blob-oid-1",
+            "content": "blob-oid-1-content"
           }
         },
         {
-          "blobOid": "some-other-blob-oid",
+          "blobOid": "blob-oid-2",
           "path": "content/movie2.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "refName": "main",
           "blob": {
-            "oid": "some-other-blob-oid",
-            "content": "some-other-blob-content"
+            "oid": "blob-oid-2",
+            "content": "blob-oid-2-content"
           }
         }
       ]
