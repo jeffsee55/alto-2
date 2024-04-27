@@ -129,6 +129,8 @@ describe("clone", async () => {
       "queries/1.json"
     );
 
+    // Begin "UPDATE" operation
+
     const newTreeMapItems = {
       "content/movie2.json": "blob-oid-3",
     };
@@ -182,6 +184,8 @@ describe("clone", async () => {
           eq(tables.refs.name, "main")
         )
       );
+
+    // end "UPDATE" operation
 
     const result2 = await db.query.repos.findFirst({
       with: {
