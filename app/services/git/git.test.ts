@@ -13,6 +13,21 @@ const movieRepoPath = "/Users/jeffsee/code/movie-content";
 const largeRepoPath = "/Users/jeffsee/code/smashing-magazine";
 largeRepoPath;
 
+/**
+ *
+ * This strategy uses a combination of where the source of truth is
+ * for the tree / commit / ref relationships are housed.
+ *
+ * The commit stores a "blobMap" object which contains the mappings
+ * of paths to the actual objects. This is the canonical source
+ * of truth for when we need to build a git commit
+ *
+ * There's also a join table between a ref and objects. The join
+ * table also has the "path". So it effectively is doing the job
+ * that potentially many commit/tree objects would do
+ *
+ */
+
 export const setup = async (
   args: {
     // When using a real db, ensure the schema is scaffolded via push:sqlite
@@ -57,7 +72,7 @@ describe("clone", async () => {
     await db.insert(tables.commits).values({
       content: "some commit content",
       oid: "some-commit-oid",
-      tree: JSON.stringify({
+      blobMap: JSON.stringify({
         "content/movie1.json": "blob-oid-1",
         "content/movie2.json": "blob-oid-2",
       }),
@@ -67,7 +82,7 @@ describe("clone", async () => {
     if (!firstCommit) {
       throw new Error(`Unable to find a commit`);
     }
-    const treeMap = JSON.parse(firstCommit?.tree);
+    const blobMap = JSON.parse(firstCommit?.blobMap);
 
     await db.insert(tables.refs).values({
       commit: "some-commit-oid",
@@ -76,7 +91,7 @@ describe("clone", async () => {
       repoName: "movie-content",
     });
 
-    for await (const [path, oid] of Object.entries(treeMap)) {
+    for await (const [path, oid] of Object.entries(blobMap)) {
       if (typeof oid !== "string") {
         throw new Error(
           `Expected oid to be a string in tree map for path ${path}`
@@ -118,13 +133,13 @@ describe("clone", async () => {
       "content/movie2.json": "blob-oid-3",
     };
     const treeMap2 = {
-      ...treeMap,
+      ...blobMap,
       ...newTreeMapItems,
     };
     await db.insert(tables.commits).values({
       content: "some commit content 2",
       oid: "some-commit-oid-2",
-      tree: JSON.stringify(treeMap2),
+      blobMap: JSON.stringify(treeMap2),
     });
 
     for await (const [path, oid] of Object.entries(newTreeMapItems)) {
@@ -185,33 +200,23 @@ describe("clone", async () => {
       "queries/2.json"
     );
 
-    // Add
-    //   await db.insert(tables.blobs).values({
-    //     oid: "some-other-blob-oid-2",
-    //     content: "some-other-blob-content-2",
-    //   });
-    //   await db.insert(tables.blobsToRefs).values({
-    //     blobOid: "some-other-blob-oid-2",
-    //     org: "jeffsee55",
-    //     repoName: "movie-content",
-    //     refName: "main",
-    //   });
-
-    //   const result2 = await db.query.repos.findFirst({
-    //     with: {
-    //       refs: {
-    //         with: {
-    //           blobsToRefs: {
-    //             with: {
-    //               blob: true,
-    //             },
-    //           },
-    //         },
-    //       },
-    //     },
-    //   });
-    //   expect(JSON.stringify(result2, null, 2)).toMatchFileSnapshot(
-    //     "queries/2.json"
-    //   );
+    const result3 = await db.query.repos.findFirst({
+      with: {
+        refs: {
+          with: {
+            blobsToRefs: {
+              where: (fields, ops) =>
+                ops.eq(fields.path, "content/movie2.json"),
+              with: {
+                blob: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(result3, null, 2)).toMatchFileSnapshot(
+      "queries/3.json"
+    );
   });
 });

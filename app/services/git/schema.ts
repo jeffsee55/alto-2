@@ -40,7 +40,7 @@ export const refs = sqliteTable(
 export const commits = sqliteTable("commits", {
   oid: text("oid").primaryKey().notNull(),
   content: text("content").notNull(),
-  tree: text("tree").notNull(),
+  blobMap: text("blobMap").notNull(),
 });
 
 export const blobs = sqliteTable("blobs", {
@@ -109,17 +109,6 @@ const blobRelations = relations(refs, ({ many }) => {
     blobsToRefs: many(blobsToRefs),
   };
 });
-
-// export const blobsToRefsRelations = relations(usersToGroups, ({ one }) => ({
-//   group: one(groups, {
-//     fields: [usersToGroups.groupId],
-//     references: [groups.id],
-//   }),
-//   user: one(users, {
-//     fields: [usersToGroups.userId],
-//     references: [users.id],
-//   }),
-// }));
 
 export const tables = {
   blobsToRefs,
