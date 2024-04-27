@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { schema, tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
 import { and, eq, not } from "drizzle-orm";
+import { Repo } from "./git";
 
 tmp.setGracefulCleanup();
 
@@ -65,52 +66,18 @@ describe("clone", async () => {
       // repoPath: largeRepoPath,
     });
 
-    await db
-      .insert(tables.repos)
-      .values({ org: "jeffsee55", name: "movie-content" });
+    const repo = new Repo({ org: "jeffsee55", name: "movie-content", db });
 
-    await db.insert(tables.commits).values({
-      content: "some commit content",
-      oid: "some-commit-oid",
-      blobMap: JSON.stringify({
-        "content/movie1.json": "blob-oid-1",
-        "content/movie2.json": "blob-oid-2",
-      }),
+    await repo.initialize();
+
+    const firstCommit = await repo.createCommit();
+
+    const branch = await repo.createBranch({
+      branchName: "main",
+      commitOid: firstCommit.oid,
     });
 
-    const firstCommit = await db.query.commits.findFirst();
-    if (!firstCommit) {
-      throw new Error(`Unable to find a commit`);
-    }
-    const blobMap = JSON.parse(firstCommit?.blobMap);
-
-    await db.insert(tables.branches).values({
-      commit: "some-commit-oid",
-      name: "main",
-      org: "jeffsee55",
-      repoName: "movie-content",
-    });
-
-    for await (const [path, oid] of Object.entries(blobMap)) {
-      if (typeof oid !== "string") {
-        throw new Error(
-          `Expected oid to be a string in tree map for path ${path}`
-        );
-      }
-      await db.insert(tables.blobs).values({
-        oid,
-        // mocking content
-        content: `${oid}-content`,
-      });
-
-      await db.insert(tables.blobsToBranches).values({
-        blobOid: oid,
-        path: path,
-        org: "jeffsee55",
-        repoName: "movie-content",
-        branchName: "main",
-      });
-    }
+    await branch.createBlobs();
 
     const result = await db.query.repos.findFirst({
       with: {
@@ -135,7 +102,7 @@ describe("clone", async () => {
       "content/movie2.json": "blob-oid-3",
     };
     const blobMap2 = {
-      ...blobMap,
+      ...firstCommit.blobMap,
       ...newBlobMapItems,
     };
     await db.insert(tables.commits).values({
