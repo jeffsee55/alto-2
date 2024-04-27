@@ -17,8 +17,8 @@ export const repos = sqliteTable(
   })
 );
 
-export const refs = sqliteTable(
-  "refs",
+export const branches = sqliteTable(
+  "branches",
   {
     name: text("id").notNull(),
     commit: text("commit")
@@ -48,8 +48,8 @@ export const blobs = sqliteTable("blobs", {
   content: text("content").notNull(),
 });
 
-export const blobsToRefs = sqliteTable(
-  "blobs_to_refs",
+export const blobsToBranches = sqliteTable(
+  "blobs_to_branches",
   {
     blobOid: text("blob_oid")
       .notNull()
@@ -57,14 +57,14 @@ export const blobsToRefs = sqliteTable(
     path: text("path").notNull(),
     org: text("org").notNull(),
     repoName: text("repo_name").notNull(),
-    refName: text("ref_name").notNull(),
+    branchName: text("branch_name").notNull(),
   },
   (table) => {
     return {
-      ref: foreignKey({
-        columns: [table.org, table.repoName, table.refName],
-        foreignColumns: [refs.org, refs.repoName, refs.name],
-        name: "ref",
+      branch: foreignKey({
+        columns: [table.org, table.repoName, table.branchName],
+        foreignColumns: [branches.org, branches.repoName, branches.name],
+        name: "branch",
       }),
     };
   }
@@ -72,47 +72,49 @@ export const blobsToRefs = sqliteTable(
 
 const repoRelations = relations(repos, ({ many }) => {
   return {
-    refs: many(refs),
+    branches: many(branches),
   };
 });
 
-const blobsToRefRelations = relations(blobsToRefs, ({ one }) => {
+const blobsToBranchesRelations = relations(blobsToBranches, ({ one }) => {
   return {
-    ref: one(refs, {
-      fields: [blobsToRefs.org, blobsToRefs.repoName, blobsToRefs.refName],
-      references: [refs.org, refs.repoName, refs.name],
+    branch: one(branches, {
+      fields: [
+        blobsToBranches.org,
+        blobsToBranches.repoName,
+        blobsToBranches.branchName,
+      ],
+      references: [branches.org, branches.repoName, branches.name],
     }),
     blob: one(blobs, {
-      fields: [blobsToRefs.blobOid],
+      fields: [blobsToBranches.blobOid],
       references: [blobs.oid],
     }),
   };
 });
 
-const refRelations = relations(refs, ({ many, one }) => {
+const branchRelations = relations(branches, ({ many, one }) => {
   return {
     commit: one(commits, {
-      fields: [refs.commit],
+      fields: [branches.commit],
       references: [commits.oid],
     }),
     repo: one(repos, {
-      fields: [refs.org, refs.repoName],
+      fields: [branches.org, branches.repoName],
       references: [repos.org, repos.name],
     }),
-    blobsToRefs: many(blobsToRefs, {
-      relationName: "blobs",
-    }),
+    blobsToBranches: many(blobsToBranches),
   };
 });
-const blobRelations = relations(refs, ({ many }) => {
+const blobRelations = relations(branches, ({ many }) => {
   return {
-    blobsToRefs: many(blobsToRefs),
+    blobsToBranches: many(blobsToBranches),
   };
 });
 
 export const tables = {
-  blobsToRefs,
-  refs,
+  blobsToBranches,
+  branches,
   repos,
   commits,
   blobs,
@@ -121,7 +123,7 @@ export const tables = {
 export const schema = {
   ...tables,
   repoRelations,
-  refRelations,
-  blobsToRefRelations,
+  branchRelations,
+  blobsToBranchesRelations,
   blobRelations,
 };

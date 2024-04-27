@@ -84,7 +84,7 @@ describe("clone", async () => {
     }
     const blobMap = JSON.parse(firstCommit?.blobMap);
 
-    await db.insert(tables.refs).values({
+    await db.insert(tables.branches).values({
       commit: "some-commit-oid",
       name: "main",
       org: "jeffsee55",
@@ -103,20 +103,20 @@ describe("clone", async () => {
         content: `${oid}-content`,
       });
 
-      await db.insert(tables.blobsToRefs).values({
+      await db.insert(tables.blobsToBranches).values({
         blobOid: oid,
         path: path,
         org: "jeffsee55",
         repoName: "movie-content",
-        refName: "main",
+        branchName: "main",
       });
     }
 
     const result = await db.query.repos.findFirst({
       with: {
-        refs: {
+        branches: {
           with: {
-            blobsToRefs: {
+            blobsToBranches: {
               with: {
                 blob: true,
               },
@@ -156,32 +156,32 @@ describe("clone", async () => {
         content: `${oid}-content`,
       });
 
-      await db.insert(tables.blobsToRefs).values({
+      await db.insert(tables.blobsToBranches).values({
         blobOid: oid,
         path: path,
         org: "jeffsee55",
         repoName: "movie-content",
-        refName: "main",
+        branchName: "main",
       });
       await db
-        .delete(tables.blobsToRefs)
+        .delete(tables.blobsToBranches)
         .where(
           and(
-            eq(tables.blobsToRefs.path, path),
-            eq(tables.blobsToRefs.refName, "main"),
-            not(eq(tables.blobsToRefs.blobOid, oid))
+            eq(tables.blobsToBranches.path, path),
+            eq(tables.blobsToBranches.branchName, "main"),
+            not(eq(tables.blobsToBranches.blobOid, oid))
           )
         );
     }
 
     await db
-      .update(tables.refs)
+      .update(tables.branches)
       .set({ commit: "some-commit-oid-2" })
       .where(
         and(
-          eq(tables.refs.org, "jeffsee55"),
-          eq(tables.refs.repoName, "movie-content"),
-          eq(tables.refs.name, "main")
+          eq(tables.branches.org, "jeffsee55"),
+          eq(tables.branches.repoName, "movie-content"),
+          eq(tables.branches.name, "main")
         )
       );
 
@@ -189,9 +189,9 @@ describe("clone", async () => {
 
     const result2 = await db.query.repos.findFirst({
       with: {
-        refs: {
+        branches: {
           with: {
-            blobsToRefs: {
+            blobsToBranches: {
               with: {
                 blob: true,
               },
@@ -206,9 +206,9 @@ describe("clone", async () => {
 
     const result3 = await db.query.repos.findFirst({
       with: {
-        refs: {
+        branches: {
           with: {
-            blobsToRefs: {
+            blobsToBranches: {
               where: (fields, ops) =>
                 ops.eq(fields.path, "content/movie2.json"),
               with: {
