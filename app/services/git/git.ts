@@ -1,7 +1,50 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { z } from "zod";
 import { schema, tables } from "./schema";
+// import * as git from "isomorphic-git";
+// import fs from "fs";
 
-export class Git {}
+type DB = BetterSQLite3Database<typeof schema>;
+
+export type FindFirstBranchReturnType = Awaited<
+  ReturnType<DB["query"]["branches"]["findFirst"]>
+>;
+
+export class GitExec {
+  dir: string = "some-dir";
+  cache: Record<string, unknown> = {};
+
+  async clone() {
+    const cloneResult = {
+      commit: {
+        content: "some commit content",
+        oid: "some-commit-oid",
+        blobMap: {
+          "content/movie1.json": "blob-oid-1",
+          "content/movie2.json": "blob-oid-2",
+        },
+      },
+    };
+    return cloneResult;
+  }
+
+  async readBlob(oid: string) {
+    return `${oid}-content`;
+    // Skipping unnecessary sha lookup
+    // this is extremely fast when the objects are coming from a
+    // pack file because the cache holds them in memory
+    // const res = await git.readObject({
+    //   fs,
+    //   dir: this.dir,
+    //   oid,
+    //   cache: this.cache,
+    // });
+    // if (!res) {
+    //   throw new Error(`Unable to read blob with oid ${oid}`);
+    // }
+    // return Buffer.from(res.object).toString("utf8");
+  }
+}
 
 export class Repo {
   org: string;
@@ -26,6 +69,13 @@ export class Repo {
   }) {
     const repo = new Repo(args);
     await repo.initialize();
+    const gitExec = new GitExec();
+    const cloneResult = await gitExec.clone();
+    const firstCommit = await repo.createCommit(cloneResult);
+    await repo.createBranch({
+      branchName: args.branchName,
+      commit: firstCommit.oid,
+    });
     return repo;
   }
 
@@ -36,17 +86,17 @@ export class Repo {
   }
   async createBranch({
     branchName,
-    commitOid,
+    commit,
   }: {
     branchName: string;
-    commitOid: string;
+    commit: string;
   }) {
     const branch = new Branch({
       db: this.db,
       repoName: this.name,
       org: this.org,
       branchName,
-      commitOid,
+      commit: commit,
     });
     await branch.save();
     return branch;
@@ -75,17 +125,14 @@ export class Repo {
     });
   }
 
-  async createCommit() {
+  async createCommit(args: {
+    commit: { content: string; oid: string; blobMap: Record<string, string> };
+  }) {
     const commit = new Commit({
       db: this.db,
       name: this.name,
       org: this.org,
-      content: "some commit content",
-      oid: "some-commit-oid",
-      blobMap: {
-        "content/movie1.json": "blob-oid-1",
-        "content/movie2.json": "blob-oid-2",
-      },
+      ...args.commit,
     });
     await commit.save();
     return commit;
@@ -104,27 +151,27 @@ export class Branch {
     repoName: string;
     db: BetterSQLite3Database<typeof schema>;
     branchName: string;
-    commitOid: string;
+    commit: string;
   }) {
     this.org = args.org;
     this.repoName = args.repoName;
     this.db = args.db;
     this.branchName = args.branchName;
-    this.commitOid = args.commitOid;
+    this.commitOid = args.commit;
   }
 
   static fromRecord(value: {
     name: string;
     org: string;
     db: BetterSQLite3Database<typeof schema>;
-    commitOid: string;
+    commit: string;
     repoName: string;
   }) {
     return new Branch({
       branchName: value.name,
       org: value.org,
       db: value.db,
-      commitOid: value.commitOid,
+      commit: value.commit,
       repoName: value.repoName,
     });
   }
@@ -177,10 +224,10 @@ export class Branch {
           `Expected oid to be a string in tree map for path ${path}`
         );
       }
+      const gitExec = new GitExec();
       await this.db.insert(tables.blobs).values({
         oid,
-        // mocking content
-        content: `${oid}-content`,
+        content: await gitExec.readBlob(oid),
       });
 
       await this.db.insert(tables.blobsToBranches).values({
@@ -219,14 +266,22 @@ export class Commit {
     this.blobMap = args.blobMap;
   }
 
-  static fromRecord(value: any) {
+  static fromRecord(value: {
+    name: string;
+    org: string;
+    db: DB;
+    content: string;
+    oid: string;
+    blobMap: string;
+  }) {
+    const blobMap = z.record(z.string()).parse(JSON.parse(value.blobMap));
     return new Commit({
       name: value.name,
       org: value.org,
       db: value.db,
       content: value.content,
       oid: value.oid,
-      blobMap: JSON.parse(value.blobMap),
+      blobMap,
     });
   }
 

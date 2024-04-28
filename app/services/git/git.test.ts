@@ -66,7 +66,6 @@ describe("clone", async () => {
       // repoPath: largeRepoPath,
     });
 
-    // const repo = new Repo({ org: "jeffsee55", name: "movie-content", db });
     const repo = await Repo.clone({
       org: "jeffsee55",
       name: "movie-content",
@@ -74,13 +73,8 @@ describe("clone", async () => {
       branchName: "main",
     });
 
-    const firstCommit = await repo.createCommit();
-
-    await repo.createBranch({
-      branchName: "main",
-      commitOid: firstCommit.oid,
-    });
     const branch = await repo.getBranch({ branchName: "main" });
+    const firstCommit = await branch.currentCommit();
 
     await branch.createBlobs();
 
