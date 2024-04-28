@@ -96,60 +96,11 @@ describe("clone", async () => {
     );
 
     // Begin "UPDATE" operation
-
-    const newBlobMapItems = {
-      "content/movie2.json": "blob-oid-3",
-    };
-    const blobMap2 = {
-      ...firstCommit.blobMap,
-      ...newBlobMapItems,
-    };
-    await db.insert(tables.commits).values({
-      content: "some commit content 2",
-      oid: "some-commit-oid-2",
-      blobMap: JSON.stringify(blobMap2),
+    const blobMap2 = await branch.add({
+      path: "content/movie2.json",
+      content: "some-content",
+      oid: "blob-oid-3",
     });
-
-    for await (const [path, oid] of Object.entries(newBlobMapItems)) {
-      if (typeof oid !== "string") {
-        throw new Error(
-          `Expected oid to be a string in tree map for path ${path}`
-        );
-      }
-      await db.insert(tables.blobs).values({
-        oid,
-        // mocking content
-        content: `${oid}-content`,
-      });
-
-      await db.insert(tables.blobsToBranches).values({
-        blobOid: oid,
-        path: path,
-        org: "jeffsee55",
-        repoName: "movie-content",
-        branchName: "main",
-      });
-      await db
-        .delete(tables.blobsToBranches)
-        .where(
-          and(
-            eq(tables.blobsToBranches.path, path),
-            eq(tables.blobsToBranches.branchName, "main"),
-            not(eq(tables.blobsToBranches.blobOid, oid))
-          )
-        );
-    }
-
-    await db
-      .update(tables.branches)
-      .set({ commit: "some-commit-oid-2" })
-      .where(
-        and(
-          eq(tables.branches.org, "jeffsee55"),
-          eq(tables.branches.repoName, "movie-content"),
-          eq(tables.branches.name, "main")
-        )
-      );
 
     // end "UPDATE" operation
 

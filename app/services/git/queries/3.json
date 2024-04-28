@@ -16,7 +16,7 @@
           "branchName": "main",
           "blob": {
             "oid": "blob-oid-3",
-            "content": "blob-oid-3-content"
+            "content": "some-content"
           }
         }
       ]

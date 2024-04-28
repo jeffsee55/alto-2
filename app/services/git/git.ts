@@ -1,18 +1,19 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { z } from "zod";
 import { schema, tables } from "./schema";
+import { and, eq, not } from "drizzle-orm";
 // import * as git from "isomorphic-git";
 // import fs from "fs";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
-export type FindFirstBranchReturnType = Awaited<
-  ReturnType<DB["query"]["branches"]["findFirst"]>
->;
-
 export class GitExec {
   dir: string = "some-dir";
   cache: Record<string, unknown> = {};
+
+  static hash(content: string) {
+    return content;
+  }
 
   async clone() {
     const cloneResult = {
@@ -174,6 +175,68 @@ export class Branch {
       commit: value.commit,
       repoName: value.repoName,
     });
+  }
+
+  async add(args: { path: string; content: string; oid: string }) {
+    // It's important that this instance isn't kept around,
+    // since we're mutating the blobMap in-place for
+    // performance reasons
+    const currentCommit = await this.currentCommit();
+
+    const oid = GitExec.hash(args.oid);
+
+    const blobMap = currentCommit.blobMap;
+    blobMap[args.path] = oid;
+
+    const commitOid = "some-commit-oid-2";
+
+    await this.db.insert(tables.commits).values({
+      content: "some commit content 2",
+      oid: commitOid,
+      blobMap: JSON.stringify(blobMap),
+    });
+    if (typeof oid !== "string") {
+      throw new Error(
+        `Expected oid to be a string in tree map for path ${args.path}`
+      );
+    }
+    console.log(oid);
+    await this.db.insert(tables.blobs).values({
+      oid,
+      // mocking content
+      content: args.content,
+    });
+
+    await this.db.insert(tables.blobsToBranches).values({
+      blobOid: oid,
+      path: args.path,
+      org: this.org,
+      repoName: this.repoName,
+      branchName: this.branchName,
+    });
+    await this.db
+      .delete(tables.blobsToBranches)
+      .where(
+        and(
+          eq(tables.blobsToBranches.path, args.path),
+          eq(tables.blobsToBranches.branchName, this.branchName),
+          not(eq(tables.blobsToBranches.blobOid, oid))
+        )
+      );
+
+    await this.db
+      .update(tables.branches)
+      .set({ commit: commitOid })
+      .where(
+        and(
+          eq(tables.branches.org, "jeffsee55"),
+          eq(tables.branches.repoName, "movie-content"),
+          eq(tables.branches.name, "main")
+        )
+      );
+    this.commitOid = commitOid;
+
+    return { [args.path]: oid };
   }
 
   async save() {
