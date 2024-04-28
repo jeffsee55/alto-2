@@ -18,10 +18,21 @@ export class Repo {
     this.db = args.db;
   }
 
+  static async clone(args: {
+    org: string;
+    name: string;
+    db: BetterSQLite3Database<typeof schema>;
+    branchName: string;
+  }) {
+    const repo = new Repo(args);
+    await repo.initialize();
+    return repo;
+  }
+
   async initialize() {
     await this.db
       .insert(tables.repos)
-      .values({ org: "jeffsee55", name: "movie-content" });
+      .values({ org: this.org, name: this.name });
   }
   async createBranch({
     branchName,
@@ -39,6 +50,29 @@ export class Repo {
     });
     await branch.save();
     return branch;
+  }
+
+  async getBranch(args: { branchName: string }) {
+    const branchRecord = await this.db.query.branches.findFirst({
+      where: (fields, ops) =>
+        ops.and(
+          ops.eq(fields.name, args.branchName),
+          ops.eq(fields.org, this.org),
+          ops.eq(fields.repoName, this.name)
+        ),
+    });
+    if (!branchRecord) {
+      throw new Error(
+        `Unable to find database record for branch branch ${args.branchName}, in repo ${this.org}:${this.name}`
+      );
+    }
+    return Branch.fromRecord({
+      ...branchRecord,
+      db: this.db,
+      name: args.branchName,
+      repoName: this.name,
+      org: this.org,
+    });
   }
 
   async createCommit() {
@@ -77,6 +111,22 @@ export class Branch {
     this.db = args.db;
     this.branchName = args.branchName;
     this.commitOid = args.commitOid;
+  }
+
+  static fromRecord(value: {
+    name: string;
+    org: string;
+    db: BetterSQLite3Database<typeof schema>;
+    commitOid: string;
+    repoName: string;
+  }) {
+    return new Branch({
+      branchName: value.name,
+      org: value.org,
+      db: value.db,
+      commitOid: value.commitOid,
+      repoName: value.repoName,
+    });
   }
 
   async save() {
