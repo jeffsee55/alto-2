@@ -2,8 +2,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { z } from "zod";
 import { schema, tables } from "./schema";
 import { and, eq, not } from "drizzle-orm";
-// import * as git from "isomorphic-git";
-// import fs from "fs";
+import * as git from "isomorphic-git";
+import fs from "fs";
 import { exec } from "child_process";
 
 type DB = BetterSQLite3Database<typeof schema>;
@@ -40,7 +40,18 @@ export class GitExec {
 
   async clone(args: { branchName: string }) {
     const lsTree = await this._lsTree({ ref: args.branchName, dir: this.dir });
-    // console.log(lsTree);
+    const oid = await git.resolveRef({
+      fs,
+      ref: args.branchName,
+      dir: this.dir,
+    });
+    // console.log(oid);
+    const commit = await git.readCommit({
+      fs,
+      dir: this.dir,
+      oid,
+    });
+    // console.log(commit);
     /**
      * When we're not working locally, we'll first need to clone into
      * a temp dir, and set that value to the localPath
@@ -50,8 +61,8 @@ export class GitExec {
         content: "some commit content",
         oid: "some-commit-oid",
         blobMap: {
-          "content/movie1.json": "blob-oid-1",
-          "content/movie2.json": "blob-oid-2",
+          "content/movies/movie1.json": "blob-oid-1",
+          "content/movies/movie2.json": "blob-oid-2",
         },
       },
     };

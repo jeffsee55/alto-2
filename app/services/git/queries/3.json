@@ -4,13 +4,13 @@
   "branches": [
     {
       "name": "main",
-      "commit": "commit-oid-{\"content/movie1.json\":\"blob-oid-1\",\"content/movie2.json\":\"blob-oid-some-content\"}",
+      "commit": "commit-oid-{\"content/movies/movie1.json\":\"blob-oid-1\",\"content/movies/movie2.json\":\"blob-oid-some-content\"}",
       "repoName": "movie-content",
       "org": "jeffsee55",
       "blobsToBranches": [
         {
           "blobOid": "blob-oid-some-content",
-          "path": "content/movie2.json",
+          "path": "content/movies/movie2.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "branchName": "main",

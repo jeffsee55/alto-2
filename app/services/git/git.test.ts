@@ -81,7 +81,7 @@ describe("clone", async () => {
     );
 
     await branch.upsert({
-      path: "content/movie2.json",
+      path: "content/movies/movie2.json",
       content: "some-content",
     });
 
@@ -90,13 +90,13 @@ describe("clone", async () => {
       "queries/2.json"
     );
 
-    const result3 = await branch.find({ path: "content/movie2.json" });
+    const result3 = await branch.find({ path: "content/movies/movie2.json" });
     expect(JSON.stringify(result3, null, 2)).toMatchFileSnapshot(
       "queries/3.json"
     );
 
     await branch.upsert({
-      path: "content/movie3.json",
+      path: "content/movies/movie3.json",
       content: "some-content-3",
     });
 
@@ -105,7 +105,7 @@ describe("clone", async () => {
       "queries/4.json"
     );
 
-    await branch.delete({ path: "content/movie2.json" });
+    await branch.delete({ path: "content/movies/movie2.json" });
 
     const result5 = await branch.list();
     expect(JSON.stringify(result5, null, 2)).toMatchFileSnapshot(
