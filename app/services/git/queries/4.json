@@ -4,40 +4,40 @@
   "branches": [
     {
       "name": "main",
-      "commit": "commit-oid-{\"content/movies/movie1.json\":\"blob-oid-1\",\"content/movies/movie2.json\":\"blob-oid-some-content\",\"content/movies/movie3.json\":\"blob-oid-some-content-3\"}",
+      "commit": "commit-oid-{\"content/movies/movie1.json\":\"d10bd1652a63dff25ee914613c573d650aa917d5\",\"content/movies/movie2.json\":\"74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0\",\"content/movies/movie3.json\":\"a2427bbe87f5da045561e163936d50d80725f640\"}",
       "repoName": "movie-content",
       "org": "jeffsee55",
       "blobsToBranches": [
         {
-          "blobOid": "blob-oid-1",
+          "blobOid": "d10bd1652a63dff25ee914613c573d650aa917d5",
           "path": "content/movies/movie1.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "branchName": "main",
           "blob": {
-            "oid": "blob-oid-1",
-            "content": "blob-oid-1-content"
+            "oid": "d10bd1652a63dff25ee914613c573d650aa917d5",
+            "content": "{\n  \"title\": \"The Adventure Begins, now!\",\n  \"description\": \"Let the new adventure begin\",\n  \"year\": 2022,\n  \"director\": \"content/directors/director3.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew1.md\"],\n  \"similarMovies\": [\"content/movies/movie2\"]\n}\n"
           }
         },
         {
-          "blobOid": "blob-oid-some-content",
+          "blobOid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
           "path": "content/movies/movie2.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "branchName": "main",
           "blob": {
-            "oid": "blob-oid-some-content",
+            "oid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
             "content": "some-content"
           }
         },
         {
-          "blobOid": "blob-oid-some-content-3",
+          "blobOid": "a2427bbe87f5da045561e163936d50d80725f640",
           "path": "content/movies/movie3.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
           "branchName": "main",
           "blob": {
-            "oid": "blob-oid-some-content-3",
+            "oid": "a2427bbe87f5da045561e163936d50d80725f640",
             "content": "some-content-3"
           }
         }

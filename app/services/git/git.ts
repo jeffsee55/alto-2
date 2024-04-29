@@ -27,8 +27,11 @@ export class GitExec {
     this.dir = args.localPath;
   }
 
-  static hashBlob(content: string) {
-    return `blob-oid-${content}`;
+  static async hashBlob(content: string) {
+    const { oid } = await git.hashBlob({
+      object: content,
+    });
+    return oid;
   }
 
   static buildCommitHash(args: {
@@ -40,17 +43,33 @@ export class GitExec {
 
   async clone(args: { branchName: string }) {
     const lsTree = await this._lsTree({ ref: args.branchName, dir: this.dir });
-    const oid = await git.resolveRef({
-      fs,
-      ref: args.branchName,
-      dir: this.dir,
+    const blobMap: Record<string, string> = {};
+    const lines = lsTree.split("\n");
+    lines.forEach((line) => {
+      if (line) {
+        const [, , oidAndPath] = line.split(" ");
+        const [oid, path] = oidAndPath.split("\t");
+        // still using mock data so don't populate the whole thing
+        if (
+          ["content/movies/movie1.json", "content/movies/movie2.json"].includes(
+            path
+          )
+        ) {
+          blobMap[path] = oid;
+        }
+      }
     });
+    // const oid = await git.resolveRef({
+    //   fs,
+    //   ref: args.branchName,
+    //   dir: this.dir,
+    // });
     // console.log(oid);
-    const commit = await git.readCommit({
-      fs,
-      dir: this.dir,
-      oid,
-    });
+    // const commit = await git.readCommit({
+    //   fs,
+    //   dir: this.dir,
+    //   oid,
+    // });
     // console.log(commit);
     /**
      * When we're not working locally, we'll first need to clone into
@@ -60,10 +79,7 @@ export class GitExec {
       commit: {
         content: "some commit content",
         oid: "some-commit-oid",
-        blobMap: {
-          "content/movies/movie1.json": "blob-oid-1",
-          "content/movies/movie2.json": "blob-oid-2",
-        },
+        blobMap,
       },
     };
     return cloneResult;
@@ -90,20 +106,23 @@ export class GitExec {
   }
 
   async readBlob(oid: string) {
-    return `${oid}-content`;
     // Skipping unnecessary sha lookup
     // this is extremely fast when the objects are coming from a
     // pack file because the cache holds them in memory
-    // const res = await git.readObject({
-    //   fs,
-    //   dir: this.dir,
-    //   oid,
-    //   cache: this.cache,
-    // });
-    // if (!res) {
-    //   throw new Error(`Unable to read blob with oid ${oid}`);
-    // }
-    // return Buffer.from(res.object).toString("utf8");
+    const res = await git.readObject({
+      fs,
+      dir: this.dir,
+      oid,
+      cache: this.cache,
+    });
+    if (!res) {
+      throw new Error(`Unable to read blob with oid ${oid}`);
+    }
+    if (res.object instanceof Uint8Array) {
+      return Buffer.from(res.object).toString("utf8");
+    } else {
+      throw new Error(`Unknown error occurred while reading blob ${res.oid}`);
+    }
   }
 }
 
@@ -329,7 +348,7 @@ export class Branch {
     // performance reasons
     const currentCommit = await this.currentCommit();
 
-    const blobOid = GitExec.hashBlob(args.content);
+    const blobOid = await GitExec.hashBlob(args.content);
 
     const blobMap = currentCommit.blobMap;
     blobMap[args.path] = blobOid;
