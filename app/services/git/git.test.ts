@@ -74,19 +74,7 @@ describe("clone", async () => {
 
     const branch = await repo.getBranch({ branchName: "main" });
 
-    const result = await db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result = await branch.list();
     expect(JSON.stringify(result, null, 2)).toMatchFileSnapshot(
       "queries/1.json"
     );
@@ -96,38 +84,12 @@ describe("clone", async () => {
       content: "some-content",
     });
 
-    const result2 = await db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result2 = await branch.list();
     expect(JSON.stringify(result2, null, 2)).toMatchFileSnapshot(
       "queries/2.json"
     );
 
-    const result3 = await db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              where: (fields, ops) =>
-                ops.eq(fields.path, "content/movie2.json"),
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result3 = await branch.find({ path: "content/movie2.json" });
     expect(JSON.stringify(result3, null, 2)).toMatchFileSnapshot(
       "queries/3.json"
     );
@@ -137,38 +99,14 @@ describe("clone", async () => {
       content: "some-content-3",
     });
 
-    const result4 = await db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result4 = await branch.list();
     expect(JSON.stringify(result4, null, 2)).toMatchFileSnapshot(
       "queries/4.json"
     );
 
     await branch.delete({ path: "content/movie2.json" });
 
-    const result5 = await db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result5 = await branch.list();
     expect(JSON.stringify(result5, null, 2)).toMatchFileSnapshot(
       "queries/5.json"
     );

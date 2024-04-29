@@ -186,6 +186,41 @@ export class Branch {
     });
   }
 
+  async list() {
+    const result = await this.db.query.repos.findFirst({
+      with: {
+        branches: {
+          with: {
+            blobsToBranches: {
+              with: {
+                blob: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return result;
+  }
+
+  async find(args: { path: string }) {
+    const result = await this.db.query.repos.findFirst({
+      with: {
+        branches: {
+          with: {
+            blobsToBranches: {
+              where: (fields, ops) => ops.eq(fields.path, args.path),
+              with: {
+                blob: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return result;
+  }
+
   async delete(args: { path: string }) {
     const currentCommit = await this.currentCommit();
 
