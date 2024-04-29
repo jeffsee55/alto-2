@@ -4,12 +4,28 @@ import { schema, tables } from "./schema";
 import { and, eq, not } from "drizzle-orm";
 // import * as git from "isomorphic-git";
 // import fs from "fs";
+import { exec } from "child_process";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
 export class GitExec {
-  dir: string = "some-dir";
   cache: Record<string, unknown> = {};
+  org: string;
+  name: string;
+  dir: string;
+  db: BetterSQLite3Database<typeof schema>;
+
+  constructor(args: {
+    org: string;
+    name: string;
+    localPath: string;
+    db: BetterSQLite3Database<typeof schema>;
+  }) {
+    this.org = args.org;
+    this.name = args.name;
+    this.db = args.db;
+    this.dir = args.localPath;
+  }
 
   static hashBlob(content: string) {
     return `blob-oid-${content}`;
@@ -22,7 +38,13 @@ export class GitExec {
     return `commit-oid-${JSON.stringify(args.blobMap)}`;
   }
 
-  async clone() {
+  async clone(args: { branchName: string }) {
+    const lsTree = await this._lsTree({ ref: args.branchName, dir: this.dir });
+    // console.log(lsTree);
+    /**
+     * When we're not working locally, we'll first need to clone into
+     * a temp dir, and set that value to the localPath
+     */
     const cloneResult = {
       commit: {
         content: "some commit content",
@@ -34,6 +56,26 @@ export class GitExec {
       },
     };
     return cloneResult;
+  }
+
+  async _lsTree({ ref, dir }: { ref: string; dir: string }): Promise<string> {
+    return new Promise((resolve, reject) => {
+      exec(
+        `git ls-tree ${ref} -r -t`,
+        { cwd: dir, maxBuffer: 1024 * 5000 },
+        async (error, stdout, stderr) => {
+          if (error) {
+            reject(`Error listing branches: ${error}`);
+            return;
+          }
+          if (stderr) {
+            reject(`Git stderr: ${stderr}`);
+            return;
+          }
+          resolve(stdout);
+        }
+      );
+    });
   }
 
   async readBlob(oid: string) {
@@ -57,28 +99,32 @@ export class GitExec {
 export class Repo {
   org: string;
   name: string;
+  localPath: string;
   db: BetterSQLite3Database<typeof schema>;
 
   constructor(args: {
     org: string;
     name: string;
+    localPath: string;
     db: BetterSQLite3Database<typeof schema>;
   }) {
     this.org = args.org;
     this.name = args.name;
     this.db = args.db;
+    this.localPath = args.localPath;
   }
 
   static async clone(args: {
     org: string;
     name: string;
+    localPath: string;
     db: BetterSQLite3Database<typeof schema>;
     branchName: string;
   }) {
     const repo = new Repo(args);
     await repo.initialize();
-    const gitExec = new GitExec();
-    const cloneResult = await gitExec.clone();
+    const gitExec = new GitExec(args);
+    const cloneResult = await gitExec.clone({ branchName: args.branchName });
     const firstCommit = await repo.createCommit(cloneResult);
     const branch = await repo.createBranch({
       branchName: args.branchName,
@@ -106,6 +152,7 @@ export class Repo {
       org: this.org,
       branchName,
       commit: commit,
+      localPath: this.localPath,
     });
     await branch.save();
     return branch;
@@ -131,6 +178,7 @@ export class Repo {
       name: args.branchName,
       repoName: this.name,
       org: this.org,
+      localPath: this.localPath,
     });
   }
 
@@ -155,6 +203,7 @@ export class Branch {
   db: BetterSQLite3Database<typeof schema>;
   branchName: string;
   commitOid: string;
+  localPath: string;
 
   constructor(args: {
     org: string;
@@ -162,18 +211,21 @@ export class Branch {
     db: BetterSQLite3Database<typeof schema>;
     branchName: string;
     commit: string;
+    localPath: string;
   }) {
     this.org = args.org;
     this.repoName = args.repoName;
     this.db = args.db;
     this.branchName = args.branchName;
     this.commitOid = args.commit;
+    this.localPath = args.localPath;
   }
 
   static fromRecord(value: {
     name: string;
     org: string;
     db: BetterSQLite3Database<typeof schema>;
+    localPath: string;
     commit: string;
     repoName: string;
   }) {
@@ -183,6 +235,7 @@ export class Branch {
       db: value.db,
       commit: value.commit,
       repoName: value.repoName,
+      localPath: value.localPath,
     });
   }
 
@@ -374,7 +427,12 @@ export class Branch {
           `Expected oid to be a string in tree map for path ${path}`
         );
       }
-      const gitExec = new GitExec();
+      const gitExec = new GitExec({
+        db: this.db,
+        name: this.repoName,
+        org: this.org,
+        localPath: this.localPath,
+      });
       await this.db.insert(tables.blobs).values({
         oid,
         content: await gitExec.readBlob(oid),

@@ -68,6 +68,7 @@ describe("clone", async () => {
     const repo = await Repo.clone({
       org: "jeffsee55",
       name: "movie-content",
+      localPath: movieRepoPath,
       db,
       branchName: "main",
     });
