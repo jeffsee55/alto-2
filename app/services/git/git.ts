@@ -11,8 +11,15 @@ export class GitExec {
   dir: string = "some-dir";
   cache: Record<string, unknown> = {};
 
-  static hash(content: string) {
-    return content;
+  static hashBlob(content: string) {
+    return `blob-oid-${content}`;
+  }
+
+  static buildCommitHash(args: {
+    message: string;
+    blobMap: Record<string, string>;
+  }) {
+    return `commit-oid-${JSON.stringify(args.blobMap)}`;
   }
 
   async clone() {
@@ -73,10 +80,11 @@ export class Repo {
     const gitExec = new GitExec();
     const cloneResult = await gitExec.clone();
     const firstCommit = await repo.createCommit(cloneResult);
-    await repo.createBranch({
+    const branch = await repo.createBranch({
       branchName: args.branchName,
-      commit: firstCommit.oid,
+      commit: firstCommit.oid(),
     });
+    await branch.createBlobs();
     return repo;
   }
 
@@ -134,6 +142,7 @@ export class Repo {
       name: this.name,
       org: this.org,
       ...args.commit,
+      message: args.commit.content,
     });
     await commit.save();
     return commit;
@@ -177,38 +186,81 @@ export class Branch {
     });
   }
 
-  async add(args: { path: string; content: string; oid: string }) {
+  async delete(args: { path: string }) {
+    const currentCommit = await this.currentCommit();
+
+    const blobMap = currentCommit.blobMap;
+
+    delete blobMap[args.path];
+
+    const commit = new Commit({
+      org: this.org,
+      name: this.repoName,
+      db: this.db,
+      blobMap,
+      message: "some commit content 3",
+    });
+
+    await commit.save();
+
+    await this.db
+      .delete(tables.blobsToBranches)
+      .where(
+        and(
+          eq(tables.blobsToBranches.path, args.path),
+          eq(tables.blobsToBranches.branchName, this.branchName)
+        )
+      );
+
+    await this.db
+      .update(tables.branches)
+      .set({ commit: commit.oid() })
+      .where(
+        and(
+          eq(tables.branches.org, this.org),
+          eq(tables.branches.repoName, this.repoName),
+          eq(tables.branches.name, this.branchName)
+        )
+      );
+  }
+
+  async upsert(args: { path: string; content: string }) {
     // It's important that this instance isn't kept around,
     // since we're mutating the blobMap in-place for
     // performance reasons
     const currentCommit = await this.currentCommit();
 
-    const oid = GitExec.hash(args.oid);
+    const blobOid = GitExec.hashBlob(args.content);
 
     const blobMap = currentCommit.blobMap;
-    blobMap[args.path] = oid;
+    blobMap[args.path] = blobOid;
 
-    const commitOid = "some-commit-oid-2";
-
-    await this.db.insert(tables.commits).values({
-      content: "some commit content 2",
-      oid: commitOid,
-      blobMap: JSON.stringify(blobMap),
+    const commit = new Commit({
+      org: this.org,
+      name: this.repoName,
+      db: this.db,
+      blobMap,
+      message: "some commit content 2",
     });
-    if (typeof oid !== "string") {
+    await commit.save();
+
+    // await this.db.insert(tables.commits).values({
+    //   content: "some commit content 2",
+    //   oid: commitOid,
+    //   blobMap: JSON.stringify(blobMap),
+    // });
+    if (typeof blobOid !== "string") {
       throw new Error(
         `Expected oid to be a string in tree map for path ${args.path}`
       );
     }
-    console.log(oid);
     await this.db.insert(tables.blobs).values({
-      oid,
-      // mocking content
+      oid: blobOid,
       content: args.content,
     });
 
     await this.db.insert(tables.blobsToBranches).values({
-      blobOid: oid,
+      blobOid: blobOid,
       path: args.path,
       org: this.org,
       repoName: this.repoName,
@@ -220,13 +272,13 @@ export class Branch {
         and(
           eq(tables.blobsToBranches.path, args.path),
           eq(tables.blobsToBranches.branchName, this.branchName),
-          not(eq(tables.blobsToBranches.blobOid, oid))
+          not(eq(tables.blobsToBranches.blobOid, blobOid))
         )
       );
 
     await this.db
       .update(tables.branches)
-      .set({ commit: commitOid })
+      .set({ commit: commit.oid() })
       .where(
         and(
           eq(tables.branches.org, "jeffsee55"),
@@ -234,9 +286,9 @@ export class Branch {
           eq(tables.branches.name, "main")
         )
       );
-    this.commitOid = commitOid;
+    this.commitOid = commit.oid();
 
-    return { [args.path]: oid };
+    return { [args.path]: blobOid };
   }
 
   async save() {
@@ -310,22 +362,19 @@ export class Commit {
   db: BetterSQLite3Database<typeof schema>;
 
   content: string;
-  oid: string;
   blobMap: Record<string, string>;
 
   constructor(args: {
     org: string;
     name: string;
     db: BetterSQLite3Database<typeof schema>;
-    content: string;
-    oid: string;
+    message: string;
     blobMap: Record<string, string>;
   }) {
     this.org = args.org;
     this.name = args.name;
     this.db = args.db;
-    this.content = args.content;
-    this.oid = args.oid;
+    this.content = args.message;
     this.blobMap = args.blobMap;
   }
 
@@ -342,16 +391,25 @@ export class Commit {
       name: value.name,
       org: value.org,
       db: value.db,
-      content: value.content,
-      oid: value.oid,
+      message: value.content,
+      // oid: GitExec.buildCommitHash({message: value.content, blobMap}),
       blobMap,
     });
   }
 
+  oid() {
+    const oid = GitExec.buildCommitHash({
+      message: this.content,
+      blobMap: this.blobMap,
+    });
+    return oid;
+  }
+
   async save() {
+    const oid = this.oid();
     await this.db.insert(tables.commits).values({
       content: this.content,
-      oid: this.oid,
+      oid,
       blobMap: JSON.stringify(this.blobMap),
     });
   }

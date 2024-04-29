@@ -4,7 +4,7 @@
   "branches": [
     {
       "name": "main",
-      "commit": "some-commit-oid",
+      "commit": "commit-oid-{\"content/movie1.json\":\"blob-oid-1\",\"content/movie2.json\":\"blob-oid-2\"}",
       "repoName": "movie-content",
       "org": "jeffsee55",
       "blobsToBranches": [
