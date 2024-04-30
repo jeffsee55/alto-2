@@ -5,6 +5,7 @@ import { and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import { exec } from "child_process";
+import { sep } from "path";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
@@ -34,6 +35,85 @@ export class GitExec {
     return oid;
   }
 
+  static async buildCommitTree(args: {
+    message: string;
+    blobMap: Record<string, string>;
+    dir: string;
+  }): Promise<TreeType> {
+    const dir = args.dir;
+    const ref = "main";
+    const lsTree = await GitExec._lsTree({ ref, dir });
+
+    const revParsePromise = new Promise((resolve, reject) => {
+      // Execute git rev-parse command to get the SHA hash for the reference
+      exec(`git rev-parse ${ref}`, { cwd: dir }, (error, stdout, stderr) => {
+        if (error) {
+          reject(stderr || error.message);
+        } else {
+          resolve(stdout.trim());
+        }
+      });
+    });
+    const commitOid = await revParsePromise;
+    if (typeof commitOid !== "string") {
+      throw new Error(`Expected commit oid to be a string, got ${commitOid}`);
+    }
+    const commit = await git.readCommit({
+      fs,
+      dir,
+      oid: commitOid,
+    });
+    if (typeof lsTree === "string") {
+      const lines = lsTree.split("\n");
+
+      const blobMap: TreeType = {
+        type: "tree",
+        mode: "040000",
+        oid: commit.commit.tree,
+        name: ".",
+        entries: {},
+      };
+
+      lines.forEach((lineString) => {
+        const [, type, oidAndPath] = lineString.split(" ");
+        if (oidAndPath) {
+          const [oid, filepath] = oidAndPath.split("\t");
+          const pathParts = filepath.split(sep);
+          const lastPart = pathParts[pathParts.length - 1];
+          let currentMap = blobMap.entries;
+          pathParts.forEach((part, i) => {
+            if (i === pathParts.length - 1) {
+              if (type === "tree") {
+                currentMap[part] = {
+                  type: "tree",
+                  mode: "040000",
+                  oid,
+                  name: lastPart,
+                  entries: {},
+                };
+              } else {
+                currentMap[part] = {
+                  type: "blob",
+                  mode: "100644",
+                  oid,
+                  name: lastPart,
+                };
+              }
+            } else {
+              const next = currentMap[part];
+              if (next.type === "tree") {
+                currentMap = next.entries;
+              }
+            }
+          });
+        }
+      });
+      return blobMap;
+    } else {
+      throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
+    }
+  }
+
   static buildCommitHash(args: {
     message: string;
     blobMap: Record<string, string>;
@@ -42,23 +122,31 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
-    const lsTree = await this._lsTree({ ref: args.branchName, dir: this.dir });
-    const blobMap: Record<string, string> = {};
+    const lsTree = await GitExec._lsTree({
+      ref: args.branchName,
+      dir: this.dir,
+    });
+    if (typeof lsTree !== "string") {
+      throw new Error(`Unexpected response from ls-tree: ${lsTree}`);
+    }
     const lines = lsTree.split("\n");
-    lines.forEach((line) => {
-      if (line) {
-        const [, , oidAndPath] = line.split(" ");
-        const [oid, path] = oidAndPath.split("\t");
-        // still using mock data so don't populate the whole thing
+
+    const blobMap: Record<string, string> = {};
+
+    lines.forEach((lineString) => {
+      const [, , oidAndPath] = lineString.split(" ");
+      if (oidAndPath) {
+        const [oid, filepath] = oidAndPath.split("\t");
         if (
           ["content/movies/movie1.json", "content/movies/movie2.json"].includes(
-            path
+            filepath
           )
         ) {
-          blobMap[path] = oid;
+          blobMap[filepath] = oid;
         }
       }
     });
+
     // const oid = await git.resolveRef({
     //   fs,
     //   ref: args.branchName,
@@ -85,7 +173,7 @@ export class GitExec {
     return cloneResult;
   }
 
-  async _lsTree({ ref, dir }: { ref: string; dir: string }): Promise<string> {
+  static async _lsTree({ ref, dir }: { ref: string; dir: string }) {
     return new Promise((resolve, reject) => {
       exec(
         `git ls-tree ${ref} -r -t`,
@@ -147,6 +235,11 @@ export class Repo {
   static async clone(args: {
     org: string;
     name: string;
+    /**
+     * The path to the Git repo on your machine, if no path
+     * is provided, a clone will be performed and stored
+     * into a temporary directory
+     */
     localPath: string;
     db: BetterSQLite3Database<typeof schema>;
     branchName: string;
@@ -537,3 +630,17 @@ export class Commit {
     });
   }
 }
+
+type TreeType = {
+  type: "tree";
+  mode: "040000";
+  name: string;
+  oid: string;
+  entries: Record<string, TreeType | BlobType>;
+};
+type BlobType = {
+  type: "blob";
+  mode: "100644";
+  oid: string;
+  name: string;
+};
