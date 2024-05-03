@@ -37,6 +37,26 @@ export class GitExec {
     return oid;
   }
 
+  async writeBlob(args: { path: string; oid: string; branchName: string }) {
+    const content = await this.readBlob(args.oid);
+
+    await this.db
+      .insert(tables.blobs)
+      .values({
+        oid: args.oid,
+        content,
+      })
+      .onConflictDoNothing();
+
+    await this.db.insert(tables.blobsToBranches).values({
+      blobOid: args.oid,
+      path: args.path,
+      org: this.org,
+      repoName: this.name,
+      branchName: args.branchName,
+    });
+  }
+
   static updateTree(args: { tree: TreeType; path: string; blobOid: string }) {
     const pathParts = args.path.split(sep);
     let currentEntry = args.tree;
@@ -662,34 +682,31 @@ export class Branch {
 
   async createBlobs() {
     const currentCommit = await this.currentCommit();
-    for await (const [path, oid] of Object.entries(currentCommit.blobMap)) {
-      if (typeof oid !== "string") {
-        throw new Error(
-          `Expected oid to be a string in tree map for path ${path}`
-        );
-      }
-      const gitExec = new GitExec({
-        db: this.db,
-        name: this.repoName,
-        org: this.org,
-        localPath: this.localPath,
-      });
-      await this.db
-        .insert(tables.blobs)
-        .values({
-          oid,
-          content: await gitExec.readBlob(oid),
-        })
-        .onConflictDoNothing();
 
-      await this.db.insert(tables.blobsToBranches).values({
-        blobOid: oid,
-        path: path,
-        org: this.org,
-        repoName: this.repoName,
-        branchName: this.branchName,
-      });
-    }
+    const gitExec = new GitExec({
+      db: this.db,
+      name: this.repoName,
+      org: this.org,
+      localPath: this.localPath,
+    });
+
+    const walkTree = async (tree: TreeType, parentPath?: string) => {
+      for await (const [name, entry] of Object.entries(tree.entries)) {
+        const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
+        if (entry.type === "tree") {
+          await walkTree(entry, path);
+        } else {
+          if (path.endsWith(".json") || path.endsWith(".md")) {
+            await gitExec.writeBlob({
+              branchName: this.branchName,
+              oid: entry.oid,
+              path: path,
+            });
+          }
+        }
+      }
+    };
+    await walkTree(currentCommit.tree);
   }
 }
 
@@ -765,6 +782,10 @@ export class Commit {
   }
 }
 
+// Current the these types are more verbose than they need to be
+// at some scale it might make sense to omit `mode` and `oid`
+// since mode can be inferred and oid is likely being changed
+// depending on what type of operation is being performed
 type TreeType = {
   type: "tree";
   mode: "040000";
