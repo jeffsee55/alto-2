@@ -66,7 +66,7 @@ export class GitExec {
         entry = {
           type: "tree",
           mode: "040000",
-          // oid: entry.oid,
+          oid: "replace-me", // it probably makes sense to only populate the oid (and mode) when we're building the commit hash
           name: part,
           entries: {},
         };
@@ -132,7 +132,7 @@ export class GitExec {
     dir: string;
   }): Promise<TreeType> {
     const dir = args.dir;
-    const ref = args.branch || "main";
+    const ref = args.branch;
     const lsTree = await GitExec._lsTree({ ref, dir });
     const commitInfo = await GitExec.getCommitForBranch({
       branch: ref,
@@ -629,9 +629,9 @@ export class Branch {
       .set({ commit: await commit.oid() })
       .where(
         and(
-          eq(tables.branches.orgName, "jeffsee55"),
-          eq(tables.branches.repoName, "movie-content"),
-          eq(tables.branches.branchName, "main")
+          eq(tables.branches.orgName, this.orgName),
+          eq(tables.branches.repoName, this.repoName),
+          eq(tables.branches.branchName, this.branchName)
         )
       );
     this.commitOid = await commit.oid();
