@@ -8,7 +8,6 @@ import fs from "fs";
 import { exec } from "child_process";
 import { sep } from "path";
 import crypto from "crypto";
-import { buf } from "crc-32/*";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
@@ -38,13 +37,49 @@ export class GitExec {
     return oid;
   }
 
+  static updateTree(args: { tree: TreeType; path: string; blobOid: string }) {
+    const pathParts = args.path.split(sep);
+    let currentEntry = args.tree;
+    pathParts.forEach((part) => {
+      const entry = currentEntry.entries[part];
+      if (!entry) throw new Error(`Unable to find entry for path ${args.path}`);
+
+      if (entry.type === "blob") {
+        currentEntry.entries[part] = {
+          type: "blob",
+          mode: "100644",
+          oid: args.blobOid,
+          name: part,
+        };
+      } else {
+        currentEntry = entry;
+      }
+    });
+    return args.tree;
+  }
+
+  static removeFromTree(args: { tree: TreeType; path: string }) {
+    const pathParts = args.path.split(sep);
+    let currentEntry = args.tree;
+    pathParts.forEach((part) => {
+      const entry = currentEntry.entries[part];
+      if (!entry) throw new Error(`Unable to find entry for path ${args.path}`);
+
+      if (entry.type === "blob") {
+        delete currentEntry.entries[part];
+      } else {
+        currentEntry = entry;
+      }
+    });
+    return args.tree;
+  }
+
   static async buildCommitTree(args: {
-    message: string;
-    // blobMap: Record<string, string>;
+    branch: string;
     dir: string;
   }): Promise<TreeType> {
     const dir = args.dir;
-    const ref = "main";
+    const ref = args.branch || "main";
     const lsTree = await GitExec._lsTree({ ref, dir });
 
     const revParsePromise = new Promise((resolve, reject) => {
@@ -120,36 +155,16 @@ export class GitExec {
   static async buildCommitHash(args: {
     message: string;
     blobMap: Record<string, string>;
+    tree: TreeType;
     dir: string;
   }) {
-    const tree = await GitExec.buildCommitTree({
-      dir: args.dir,
-      message: args.message,
-    });
+    const tree = args.tree;
     const buildTree = async (tree: TreeType) => {
       const entries: { type: "tree" | "blob"; oid: string; name: string }[] =
         [];
       for await (const [name, entry] of Object.entries(tree.entries)) {
         if (entry.type === "tree") {
           const oid = await buildTree(entry);
-          if (oid !== entry.oid) {
-            // console.log("no match", name);
-            // console.log("attempt1x", oid);
-            // console.log("kjwwwreal", entry.oid);
-            if (name === "content-sp") {
-              const isoResult = await git.writeTree({
-                fs,
-                tree: Object.values(entry.entries).map((e) => ({
-                  mode: e.mode,
-                  path: e.name,
-                  oid: e.oid,
-                  type: e.type,
-                })),
-                dir: "some-dir",
-              });
-              // console.log("isoResult", isoResult);
-            }
-          }
           entries.push({ type: "tree", oid, name });
         } else {
           entries.push({ type: "blob", oid: entry.oid, name });
@@ -243,6 +258,7 @@ export class GitExec {
      * a temp dir, and set that value to the localPath
      */
     const cloneResult = {
+      branchName: args.branchName,
       commit: {
         content: "some commit content",
         oid: "some-commit-oid",
@@ -385,6 +401,7 @@ export class Repo {
   }
 
   async createCommit(args: {
+    branchName: string;
     commit: { content: string; oid: string; blobMap: Record<string, string> };
   }) {
     const commit = new Commit({
@@ -394,6 +411,10 @@ export class Repo {
       ...args.commit,
       message: args.commit.content,
       localPath: this.localPath,
+      tree: await GitExec.buildCommitTree({
+        branch: args.branchName,
+        dir: this.localPath,
+      }),
     });
     await commit.save();
     return commit;
@@ -484,6 +505,11 @@ export class Branch {
     const blobMap = currentCommit.blobMap;
 
     delete blobMap[args.path];
+    const tree = await GitExec.buildCommitTree({
+      branch: this.branchName,
+      dir: this.localPath,
+    });
+    GitExec.removeFromTree({ tree, path: args.path });
 
     const commit = new Commit({
       org: this.org,
@@ -492,6 +518,7 @@ export class Branch {
       blobMap,
       message: "some commit content 3",
       localPath: this.localPath,
+      tree: tree,
     });
 
     await commit.save();
@@ -527,14 +554,20 @@ export class Branch {
 
     const blobMap = currentCommit.blobMap;
     blobMap[args.path] = blobOid;
+    const tree = await GitExec.buildCommitTree({
+      branch: this.branchName,
+      dir: this.localPath,
+    });
+    GitExec.updateTree({ blobOid, tree, path: args.path });
 
     const commit = new Commit({
       org: this.org,
       name: this.repoName,
       db: this.db,
       blobMap,
-      message: "some commit content 2",
+      message: `Autosave of ${args.path}`,
       localPath: this.localPath,
+      tree: tree,
     });
     await commit.save();
 
@@ -664,6 +697,7 @@ export class Commit {
 
   content: string;
   blobMap: Record<string, string>;
+  tree: TreeType;
   localPath: string;
 
   constructor(args: {
@@ -673,6 +707,7 @@ export class Commit {
     message: string;
     blobMap: Record<string, string>;
     localPath: string;
+    tree: TreeType;
   }) {
     this.org = args.org;
     this.name = args.name;
@@ -680,6 +715,7 @@ export class Commit {
     this.content = args.message;
     this.blobMap = args.blobMap;
     this.localPath = args.localPath;
+    this.tree = args.tree;
   }
 
   static fromRecord(value: {
@@ -699,6 +735,9 @@ export class Commit {
       message: value.content,
       localPath: value.localPath,
       blobMap,
+      tree: GitExec.buildCommitTree({
+        dir: value.localPath,
+      }),
     });
   }
 
@@ -707,6 +746,7 @@ export class Commit {
       message: this.content,
       blobMap: this.blobMap,
       dir: this.localPath,
+      tree: this.tree,
     });
     return oid;
   }
