@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { schema, tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
-import { and, eq, not } from "drizzle-orm";
+import { Repo } from "./git";
 
 tmp.setGracefulCleanup();
 
@@ -65,162 +65,51 @@ describe("clone", async () => {
       // repoPath: largeRepoPath,
     });
 
-    await db
-      .insert(tables.repos)
-      .values({ org: "jeffsee55", name: "movie-content" });
-
-    await db.insert(tables.commits).values({
-      content: "some commit content",
-      oid: "some-commit-oid",
-      blobMap: JSON.stringify({
-        "content/movie1.json": "blob-oid-1",
-        "content/movie2.json": "blob-oid-2",
-      }),
-    });
-
-    const firstCommit = await db.query.commits.findFirst();
-    if (!firstCommit) {
-      throw new Error(`Unable to find a commit`);
-    }
-    const blobMap = JSON.parse(firstCommit?.blobMap);
-
-    await db.insert(tables.refs).values({
-      commit: "some-commit-oid",
-      name: "main",
+    const repo = await Repo.clone({
       org: "jeffsee55",
-      repoName: "movie-content",
+      name: "movie-content",
+      localPath: movieRepoPath,
+      db,
+      branchName: "main",
     });
 
-    for await (const [path, oid] of Object.entries(blobMap)) {
-      if (typeof oid !== "string") {
-        throw new Error(
-          `Expected oid to be a string in tree map for path ${path}`
-        );
-      }
-      await db.insert(tables.blobs).values({
-        oid,
-        // mocking content
-        content: `${oid}-content`,
-      });
+    const branch = await repo.getBranch({ branchName: "main" });
 
-      await db.insert(tables.blobsToRefs).values({
-        blobOid: oid,
-        path: path,
-        org: "jeffsee55",
-        repoName: "movie-content",
-        refName: "main",
-      });
-    }
-
-    const result = await db.query.repos.findFirst({
-      with: {
-        refs: {
-          with: {
-            blobsToRefs: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result = await branch.list();
     expect(JSON.stringify(result, null, 2)).toMatchFileSnapshot(
       "queries/1.json"
     );
 
-    // Begin "UPDATE" operation
-
-    const newTreeMapItems = {
-      "content/movie2.json": "blob-oid-3",
-    };
-    const treeMap2 = {
-      ...blobMap,
-      ...newTreeMapItems,
-    };
-    await db.insert(tables.commits).values({
-      content: "some commit content 2",
-      oid: "some-commit-oid-2",
-      blobMap: JSON.stringify(treeMap2),
+    await branch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-content",
     });
 
-    for await (const [path, oid] of Object.entries(newTreeMapItems)) {
-      if (typeof oid !== "string") {
-        throw new Error(
-          `Expected oid to be a string in tree map for path ${path}`
-        );
-      }
-      await db.insert(tables.blobs).values({
-        oid,
-        // mocking content
-        content: `${oid}-content`,
-      });
-
-      await db.insert(tables.blobsToRefs).values({
-        blobOid: oid,
-        path: path,
-        org: "jeffsee55",
-        repoName: "movie-content",
-        refName: "main",
-      });
-      await db
-        .delete(tables.blobsToRefs)
-        .where(
-          and(
-            eq(tables.blobsToRefs.path, path),
-            eq(tables.blobsToRefs.refName, "main"),
-            not(eq(tables.blobsToRefs.blobOid, oid))
-          )
-        );
-    }
-
-    await db
-      .update(tables.refs)
-      .set({ commit: "some-commit-oid-2" })
-      .where(
-        and(
-          eq(tables.refs.org, "jeffsee55"),
-          eq(tables.refs.repoName, "movie-content"),
-          eq(tables.refs.name, "main")
-        )
-      );
-
-    // end "UPDATE" operation
-
-    const result2 = await db.query.repos.findFirst({
-      with: {
-        refs: {
-          with: {
-            blobsToRefs: {
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result2 = await branch.list();
     expect(JSON.stringify(result2, null, 2)).toMatchFileSnapshot(
       "queries/2.json"
     );
 
-    const result3 = await db.query.repos.findFirst({
-      with: {
-        refs: {
-          with: {
-            blobsToRefs: {
-              where: (fields, ops) =>
-                ops.eq(fields.path, "content/movie2.json"),
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const result3 = await branch.find({ path: "content/movies/movie2.json" });
     expect(JSON.stringify(result3, null, 2)).toMatchFileSnapshot(
       "queries/3.json"
+    );
+
+    await branch.upsert({
+      path: "content/movies/movie3.json",
+      content: "some-content-3",
+    });
+
+    const result4 = await branch.list();
+    expect(JSON.stringify(result4, null, 2)).toMatchFileSnapshot(
+      "queries/4.json"
+    );
+
+    await branch.delete({ path: "content/movies/movie2.json" });
+
+    const result5 = await branch.list();
+    expect(JSON.stringify(result5, null, 2)).toMatchFileSnapshot(
+      "queries/5.json"
     );
   });
 });

@@ -1,22 +1,22 @@
 {
   "org": "jeffsee55",
   "name": "movie-content",
-  "refs": [
+  "branches": [
     {
       "name": "main",
-      "commit": "some-commit-oid-2",
+      "commit": "3df63e97a07884213107ce3289853eba9910cb43",
       "repoName": "movie-content",
       "org": "jeffsee55",
-      "blobsToRefs": [
+      "blobsToBranches": [
         {
-          "blobOid": "blob-oid-3",
-          "path": "content/movie2.json",
+          "blobOid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
+          "path": "content/movies/movie2.json",
           "org": "jeffsee55",
           "repoName": "movie-content",
-          "refName": "main",
+          "branchName": "main",
           "blob": {
-            "oid": "blob-oid-3",
-            "content": "blob-oid-3-content"
+            "oid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
+            "content": "some-content"
           }
         }
       ]
