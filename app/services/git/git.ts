@@ -13,19 +13,19 @@ type DB = BetterSQLite3Database<typeof schema>;
 
 export class GitExec {
   cache: Record<string, unknown> = {};
-  org: string;
-  name: string;
+  orgName: string;
+  repoName: string;
   dir: string;
   db: BetterSQLite3Database<typeof schema>;
 
   constructor(args: {
-    org: string;
-    name: string;
+    orgName: string;
+    repoName: string;
     localPath: string;
     db: BetterSQLite3Database<typeof schema>;
   }) {
-    this.org = args.org;
-    this.name = args.name;
+    this.orgName = args.orgName;
+    this.repoName = args.repoName;
     this.db = args.db;
     this.dir = args.localPath;
   }
@@ -51,8 +51,8 @@ export class GitExec {
     await this.db.insert(tables.blobsToBranches).values({
       blobOid: args.oid,
       path: args.path,
-      org: this.org,
-      repoName: this.name,
+      orgName: this.orgName,
+      repoName: this.repoName,
       branchName: args.branchName,
     });
   }
@@ -301,26 +301,26 @@ export class GitExec {
 }
 
 export class Repo {
-  org: string;
-  name: string;
+  orgName: string;
+  repoName: string;
   localPath: string;
   db: BetterSQLite3Database<typeof schema>;
 
   constructor(args: {
-    org: string;
-    name: string;
+    orgName: string;
+    repoName: string;
     localPath: string;
     db: BetterSQLite3Database<typeof schema>;
   }) {
-    this.org = args.org;
-    this.name = args.name;
+    this.orgName = args.orgName;
+    this.repoName = args.repoName;
     this.db = args.db;
     this.localPath = args.localPath;
   }
 
   static async clone(args: {
-    org: string;
-    name: string;
+    orgName: string;
+    repoName: string;
     /**
      * The path to the Git repo on your machine, if no path
      * is provided, a clone will be performed and stored
@@ -346,7 +346,7 @@ export class Repo {
   async initialize() {
     await this.db
       .insert(tables.repos)
-      .values({ org: this.org, name: this.name });
+      .values({ orgName: this.orgName, repoName: this.repoName });
   }
   async createBranch({
     branchName,
@@ -357,8 +357,8 @@ export class Repo {
   }) {
     const branch = new Branch({
       db: this.db,
-      repoName: this.name,
-      org: this.org,
+      repoName: this.repoName,
+      orgName: this.orgName,
       branchName,
       commit: commit,
       localPath: this.localPath,
@@ -371,22 +371,22 @@ export class Repo {
     const branchRecord = await this.db.query.branches.findFirst({
       where: (fields, ops) =>
         ops.and(
-          ops.eq(fields.name, args.branchName),
-          ops.eq(fields.org, this.org),
-          ops.eq(fields.repoName, this.name)
+          ops.eq(fields.branchName, args.branchName),
+          ops.eq(fields.orgName, this.orgName),
+          ops.eq(fields.repoName, this.repoName)
         ),
     });
     if (!branchRecord) {
       throw new Error(
-        `Unable to find database record for branch branch ${args.branchName}, in repo ${this.org}:${this.name}`
+        `Unable to find database record for branch branch ${args.branchName}, in repo ${this.orgName}:${this.repoName}`
       );
     }
     return Branch.fromRecord({
       ...branchRecord,
       db: this.db,
       name: args.branchName,
-      repoName: this.name,
-      org: this.org,
+      repoName: this.repoName,
+      orgName: this.orgName,
       localPath: this.localPath,
     });
   }
@@ -397,8 +397,8 @@ export class Repo {
   }) {
     const commit = new Commit({
       db: this.db,
-      name: this.name,
-      org: this.org,
+      repoName: this.repoName,
+      orgName: this.orgName,
       ...args.commit,
       message: args.commit.content,
       localPath: this.localPath,
@@ -413,7 +413,7 @@ export class Repo {
 }
 
 export class Branch {
-  org: string;
+  orgName: string;
   repoName: string;
   db: BetterSQLite3Database<typeof schema>;
   branchName: string;
@@ -421,14 +421,14 @@ export class Branch {
   localPath: string;
 
   constructor(args: {
-    org: string;
+    orgName: string;
     repoName: string;
     db: BetterSQLite3Database<typeof schema>;
     branchName: string;
     commit: string;
     localPath: string;
   }) {
-    this.org = args.org;
+    this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
     this.branchName = args.branchName;
@@ -438,7 +438,7 @@ export class Branch {
 
   static fromRecord(value: {
     name: string;
-    org: string;
+    orgName: string;
     db: BetterSQLite3Database<typeof schema>;
     localPath: string;
     commit: string;
@@ -446,7 +446,7 @@ export class Branch {
   }) {
     return new Branch({
       branchName: value.name,
-      org: value.org,
+      orgName: value.orgName,
       db: value.db,
       commit: value.commit,
       repoName: value.repoName,
@@ -497,8 +497,8 @@ export class Branch {
     GitExec.removeFromTree({ tree, path: args.path });
 
     const commit = new Commit({
-      org: this.org,
-      name: this.repoName,
+      orgName: this.orgName,
+      repoName: this.repoName,
       db: this.db,
       message: `Deleted ${args.path}`,
       localPath: this.localPath,
@@ -521,9 +521,9 @@ export class Branch {
       .set({ commit: await commit.oid() })
       .where(
         and(
-          eq(tables.branches.org, this.org),
+          eq(tables.branches.orgName, this.orgName),
           eq(tables.branches.repoName, this.repoName),
-          eq(tables.branches.name, this.branchName)
+          eq(tables.branches.branchName, this.branchName)
         )
       );
   }
@@ -540,8 +540,8 @@ export class Branch {
     GitExec.updateTree({ blobOid, tree, path: args.path });
 
     const commit = new Commit({
-      org: this.org,
-      name: this.repoName,
+      orgName: this.orgName,
+      repoName: this.repoName,
       db: this.db,
       message: `Autosave of ${args.path}`,
       localPath: this.localPath,
@@ -565,7 +565,7 @@ export class Branch {
     await this.db.insert(tables.blobsToBranches).values({
       blobOid: blobOid,
       path: args.path,
-      org: this.org,
+      orgName: this.orgName,
       repoName: this.repoName,
       branchName: this.branchName,
     });
@@ -584,9 +584,9 @@ export class Branch {
       .set({ commit: await commit.oid() })
       .where(
         and(
-          eq(tables.branches.org, "jeffsee55"),
+          eq(tables.branches.orgName, "jeffsee55"),
           eq(tables.branches.repoName, "movie-content"),
-          eq(tables.branches.name, "main")
+          eq(tables.branches.branchName, "main")
         )
       );
     this.commitOid = await commit.oid();
@@ -597,19 +597,19 @@ export class Branch {
   async save() {
     await this.db.insert(tables.branches).values({
       commit: this.commitOid,
-      name: this.branchName,
-      org: this.org,
+      branchName: this.branchName,
+      orgName: this.orgName,
       repoName: this.repoName,
     });
   }
 
   async getRecord() {
     const branchRecord = await this.db.query.branches.findFirst({
-      where: (fields, ops) => ops.eq(fields.name, this.branchName),
+      where: (fields, ops) => ops.eq(fields.branchName, this.branchName),
     });
     if (!branchRecord) {
       throw new Error(
-        `Unable to find database record for branch ${this.branchName}, in repo ${this.org}:${this.repoName}`
+        `Unable to find database record for branch ${this.branchName}, in repo ${this.orgName}:${this.repoName}`
       );
     }
     return branchRecord;
@@ -622,13 +622,13 @@ export class Branch {
     });
     if (!commitRecord) {
       throw new Error(
-        `Unable to find database record for commit with oid ${branchRecord.commit} of branch ${this.branchName}, in repo ${this.org}:${this.repoName}`
+        `Unable to find database record for commit with oid ${branchRecord.commit} of branch ${this.branchName}, in repo ${this.orgName}:${this.repoName}`
       );
     }
 
     return Commit.fromRecord({
-      name: this.repoName,
-      org: this.org,
+      repoName: this.repoName,
+      orgName: this.orgName,
       db: this.db,
       localPath: this.localPath,
       ...commitRecord,
@@ -640,8 +640,8 @@ export class Branch {
 
     const gitExec = new GitExec({
       db: this.db,
-      name: this.repoName,
-      org: this.org,
+      repoName: this.repoName,
+      orgName: this.orgName,
       localPath: this.localPath,
     });
 
@@ -666,8 +666,8 @@ export class Branch {
 }
 
 export class Commit {
-  org: string;
-  name: string;
+  orgName: string;
+  repoName: string;
   db: BetterSQLite3Database<typeof schema>;
 
   content: string;
@@ -675,15 +675,15 @@ export class Commit {
   localPath: string;
 
   constructor(args: {
-    org: string;
-    name: string;
+    orgName: string;
+    repoName: string;
     db: BetterSQLite3Database<typeof schema>;
     message: string;
     localPath: string;
     tree: TreeType;
   }) {
-    this.org = args.org;
-    this.name = args.name;
+    this.orgName = args.orgName;
+    this.repoName = args.repoName;
     this.db = args.db;
     this.content = args.message;
     this.localPath = args.localPath;
@@ -691,8 +691,8 @@ export class Commit {
   }
 
   static fromRecord(value: {
-    name: string;
-    org: string;
+    repoName: string;
+    orgName: string;
     db: DB;
     content: string;
     oid: string;
@@ -701,8 +701,8 @@ export class Commit {
   }) {
     const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
     return new Commit({
-      name: value.name,
-      org: value.org,
+      repoName: value.repoName,
+      orgName: value.orgName,
       db: value.db,
       message: value.content,
       localPath: value.localPath,

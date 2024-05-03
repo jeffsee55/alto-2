@@ -9,29 +9,29 @@ import {
 export const repos = sqliteTable(
   "repos",
   {
-    org: text("org").notNull(),
-    name: text("name").notNull(),
+    orgName: text("org_name").notNull(),
+    repoName: text("repo_name").notNull(),
   },
   (t) => ({
-    pk: primaryKey({ columns: [t.org, t.name] }),
+    pk: primaryKey({ columns: [t.orgName, t.repoName] }),
   })
 );
 
 export const branches = sqliteTable(
   "branches",
   {
-    name: text("id").notNull(),
+    orgName: text("org_name").notNull(),
+    repoName: text("repo_name").notNull(),
+    branchName: text("branch_name").notNull(),
     commit: text("commit")
       .notNull()
       .references(() => commits.oid),
-    repoName: text("repo_name").notNull(),
-    org: text("org").notNull(),
   },
   (t) => ({
-    pk: primaryKey({ columns: [t.org, t.repoName, t.name] }),
+    pk: primaryKey({ columns: [t.orgName, t.repoName, t.branchName] }),
     repo: foreignKey({
-      columns: [t.org, t.repoName],
-      foreignColumns: [repos.org, repos.name],
+      columns: [t.orgName, t.repoName],
+      foreignColumns: [repos.orgName, repos.repoName],
       name: "repo",
     }),
   })
@@ -51,19 +51,23 @@ export const blobs = sqliteTable("blobs", {
 export const blobsToBranches = sqliteTable(
   "blobs_to_branches",
   {
+    orgName: text("org_name").notNull(),
+    repoName: text("repo_name").notNull(),
+    branchName: text("branch_name").notNull(),
     blobOid: text("blob_oid")
       .notNull()
       .references(() => blobs.oid),
     path: text("path").notNull(),
-    org: text("org").notNull(),
-    repoName: text("repo_name").notNull(),
-    branchName: text("branch_name").notNull(),
   },
   (table) => {
     return {
       branch: foreignKey({
-        columns: [table.org, table.repoName, table.branchName],
-        foreignColumns: [branches.org, branches.repoName, branches.name],
+        columns: [table.orgName, table.repoName, table.branchName],
+        foreignColumns: [
+          branches.orgName,
+          branches.repoName,
+          branches.branchName,
+        ],
         name: "branch",
       }),
     };
@@ -80,11 +84,11 @@ const blobsToBranchesRelations = relations(blobsToBranches, ({ one }) => {
   return {
     branch: one(branches, {
       fields: [
-        blobsToBranches.org,
+        blobsToBranches.orgName,
         blobsToBranches.repoName,
         blobsToBranches.branchName,
       ],
-      references: [branches.org, branches.repoName, branches.name],
+      references: [branches.orgName, branches.repoName, branches.branchName],
     }),
     blob: one(blobs, {
       fields: [blobsToBranches.blobOid],
@@ -100,8 +104,8 @@ const branchRelations = relations(branches, ({ many, one }) => {
       references: [commits.oid],
     }),
     repo: one(repos, {
-      fields: [branches.org, branches.repoName],
-      references: [repos.org, repos.name],
+      fields: [branches.orgName, branches.repoName],
+      references: [repos.orgName, repos.repoName],
     }),
     blobsToBranches: many(blobsToBranches),
   };
