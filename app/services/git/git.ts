@@ -74,6 +74,25 @@ export class GitExec {
     return args.tree;
   }
 
+  static async getCommitForBranch(args: { branch: string; dir: string }) {
+    const commitOid = await git.resolveRef({
+      fs,
+      dir: args.dir,
+      ref: args.branch,
+    });
+
+    if (typeof commitOid !== "string") {
+      throw new Error(`Expected commit oid to be a string, got ${commitOid}`);
+    }
+
+    const commit = await git.readCommit({
+      fs,
+      dir: args.dir,
+      oid: commitOid,
+    });
+    return commit;
+  }
+
   static async buildCommitTree(args: {
     branch: string;
     dir: string;
@@ -81,33 +100,18 @@ export class GitExec {
     const dir = args.dir;
     const ref = args.branch || "main";
     const lsTree = await GitExec._lsTree({ ref, dir });
+    const commitInfo = await GitExec.getCommitForBranch({
+      branch: ref,
+      dir: dir,
+    });
 
-    const revParsePromise = new Promise((resolve, reject) => {
-      // Execute git rev-parse command to get the SHA hash for the reference
-      exec(`git rev-parse ${ref}`, { cwd: dir }, (error, stdout, stderr) => {
-        if (error) {
-          reject(stderr || error.message);
-        } else {
-          resolve(stdout.trim());
-        }
-      });
-    });
-    const commitOid = await revParsePromise;
-    if (typeof commitOid !== "string") {
-      throw new Error(`Expected commit oid to be a string, got ${commitOid}`);
-    }
-    const commit = await git.readCommit({
-      fs,
-      dir,
-      oid: commitOid,
-    });
     if (typeof lsTree === "string") {
       const lines = lsTree.split("\n");
 
       const tree: TreeType = {
         type: "tree",
         mode: "040000",
-        oid: commit.commit.tree,
+        oid: commitInfo.commit.tree,
         name: ".",
         entries: {},
       };
@@ -244,12 +248,17 @@ export class GitExec {
         }
       }
     });
-    return blobMap;
+    return { blobMap };
   }
 
   async clone(args: { branchName: string }) {
-    const blobMap = await GitExec.buildBlobMapFromLsTree({
+    const { blobMap } = await GitExec.buildBlobMapFromLsTree({
       ref: args.branchName,
+      dir: this.dir,
+    });
+
+    const commitInfo = await GitExec.getCommitForBranch({
+      branch: args.branchName,
       dir: this.dir,
     });
 
@@ -260,8 +269,8 @@ export class GitExec {
     const cloneResult = {
       branchName: args.branchName,
       commit: {
-        content: "some commit content",
-        oid: "some-commit-oid",
+        content: commitInfo.commit.message,
+        oid: commitInfo.oid,
         blobMap,
       },
     };
@@ -516,7 +525,7 @@ export class Branch {
       name: this.repoName,
       db: this.db,
       blobMap,
-      message: "some commit content 3",
+      message: `Deleted ${args.path}`,
       localPath: this.localPath,
       tree: tree,
     });
