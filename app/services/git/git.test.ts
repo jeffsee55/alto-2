@@ -111,5 +111,15 @@ describe("clone", async () => {
     await expect(JSON.stringify(result5, null, 2)).toMatchFileSnapshot(
       "queries/5.json"
     );
+
+    await branch.upsert({
+      path: "content/movies/comedies/movie4.json",
+      content: "some-content-4",
+    });
+
+    const result6 = await branch.list({ offset: 10 });
+    await expect(JSON.stringify(result6, null, 2)).toMatchFileSnapshot(
+      "queries/6.json"
+    );
   });
 });

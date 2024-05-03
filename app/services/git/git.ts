@@ -1,7 +1,7 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { z } from "zod";
 import { schema, tables } from "./schema";
-import { and, eq, not } from "drizzle-orm";
+import { SQL, and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
 import {} from "isomorphic-git";
 import fs from "fs";
@@ -61,8 +61,22 @@ export class GitExec {
     const pathParts = args.path.split(sep);
     let currentEntry = args.tree;
     pathParts.forEach((part) => {
-      const entry = currentEntry.entries[part];
-      if (!entry) throw new Error(`Unable to find entry for path ${args.path}`);
+      let entry = currentEntry.entries[part];
+      if (!entry) {
+        entry = {
+          type: "tree",
+          mode: "040000",
+          // oid: entry.oid,
+          name: part,
+          entries: {},
+        };
+
+        currentEntry.entries[part] = entry;
+      }
+      if (!entry)
+        throw new Error(
+          `Unable to find entry for path ${args.path}, no entry found at ${part}`
+        );
 
       if (entry.type === "blob") {
         currentEntry.entries[part] = {
@@ -454,40 +468,71 @@ export class Branch {
     });
   }
 
-  async list() {
-    const result = await this.db.query.repos.findFirst({
-      with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              with: {
-                blob: true,
-              },
-              limit: 10,
-            },
-          },
-        },
+  whereClause(
+    ...args: Parameters<
+      Exclude<
+        NonNullable<
+          NonNullable<
+            Parameters<typeof this.db.query.blobsToBranches.findMany>[0]
+          >["where"]
+        >,
+        SQL
+      >
+    >
+  ) {
+    const [fields, ops] = args;
+    return ops.and(
+      ops.eq(fields.orgName, this.orgName),
+      ops.eq(fields.repoName, this.repoName),
+      ops.eq(fields.branchName, this.branchName)
+    );
+  }
+
+  async list(args?: { limit?: number; offset?: number }) {
+    const items = await this.db.query.blobsToBranches.findMany({
+      where: (fields, ops) => {
+        return this.whereClause(fields, ops);
       },
+      columns: {
+        path: true,
+      },
+      with: {
+        blob: true,
+      },
+      limit: args?.limit || 10,
+      offset: args?.offset || 10,
     });
-    return result;
+    return {
+      orgName: this.orgName,
+      repoName: this.repoName,
+      branchName: this.branchName,
+      commitOid: this.commitOid,
+      items,
+    };
   }
 
   async find(args: { path: string }) {
-    const result = await this.db.query.repos.findFirst({
+    const item = await this.db.query.blobsToBranches.findFirst({
+      where: (fields, ops) => {
+        return ops.and(
+          this.whereClause(fields, ops),
+          ops.eq(fields.path, args.path)
+        );
+      },
+      columns: {
+        path: true,
+      },
       with: {
-        branches: {
-          with: {
-            blobsToBranches: {
-              where: (fields, ops) => ops.eq(fields.path, args.path),
-              with: {
-                blob: true,
-              },
-            },
-          },
-        },
+        blob: true,
       },
     });
-    return result;
+    return {
+      orgName: this.orgName,
+      repoName: this.repoName,
+      branchName: this.branchName,
+      commitOid: this.commitOid,
+      item,
+    };
   }
 
   async delete(args: { path: string }) {
