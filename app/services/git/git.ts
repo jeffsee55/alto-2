@@ -514,10 +514,7 @@ export class Branch {
     const blobMap = currentCommit.blobMap;
 
     delete blobMap[args.path];
-    const tree = await GitExec.buildCommitTree({
-      branch: this.branchName,
-      dir: this.localPath,
-    });
+    const tree = currentCommit.tree;
     GitExec.removeFromTree({ tree, path: args.path });
 
     const commit = new Commit({
@@ -563,10 +560,7 @@ export class Branch {
 
     const blobMap = currentCommit.blobMap;
     blobMap[args.path] = blobOid;
-    const tree = await GitExec.buildCommitTree({
-      branch: this.branchName,
-      dir: this.localPath,
-    });
+    const tree = currentCommit.tree;
     GitExec.updateTree({ blobOid, tree, path: args.path });
 
     const commit = new Commit({
@@ -734,9 +728,11 @@ export class Commit {
     content: string;
     oid: string;
     blobMap: string;
+    tree: string;
     localPath: string;
   }) {
     const blobMap = z.record(z.string()).parse(JSON.parse(value.blobMap));
+    const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
     return new Commit({
       name: value.name,
       org: value.org,
@@ -744,9 +740,7 @@ export class Commit {
       message: value.content,
       localPath: value.localPath,
       blobMap,
-      tree: GitExec.buildCommitTree({
-        dir: value.localPath,
-      }),
+      tree: tree,
     });
   }
 
@@ -762,14 +756,12 @@ export class Commit {
 
   async save() {
     const oid = await this.oid();
-    await this.db
-      .insert(tables.commits)
-      .values({
-        content: this.content,
-        oid,
-        blobMap: JSON.stringify(this.blobMap),
-      })
-      .onConflictDoNothing();
+    await this.db.insert(tables.commits).values({
+      content: this.content,
+      oid,
+      blobMap: JSON.stringify(this.blobMap),
+      tree: JSON.stringify(this.tree),
+    });
   }
 }
 

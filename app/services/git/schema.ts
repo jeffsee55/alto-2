@@ -41,6 +41,7 @@ export const commits = sqliteTable("commits", {
   oid: text("oid").primaryKey().notNull(),
   content: text("content").notNull(),
   blobMap: text("blobMap").notNull(),
+  tree: text("tree").notNull(),
 });
 
 export const blobs = sqliteTable("blobs", {
