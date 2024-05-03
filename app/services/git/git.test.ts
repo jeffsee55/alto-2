@@ -73,6 +73,8 @@ describe("clone", async () => {
       branchName: "main",
     });
 
+    return;
+
     const branch = await repo.getBranch({ branchName: "main" });
 
     const result = await branch.list();

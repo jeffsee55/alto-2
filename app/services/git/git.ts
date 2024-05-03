@@ -3,10 +3,12 @@ import { z } from "zod";
 import { schema, tables } from "./schema";
 import { and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
+import {} from "isomorphic-git";
 import fs from "fs";
 import { exec } from "child_process";
 import { sep } from "path";
 import crypto from "crypto";
+import { buf } from "crc-32/*";
 
 type DB = BetterSQLite3Database<typeof schema>;
 
@@ -124,30 +126,77 @@ export class GitExec {
       dir: args.dir,
       message: args.message,
     });
-    const buildTree = (tree: TreeType) => {
+    const buildTree = async (tree: TreeType) => {
       const entries: { type: "tree" | "blob"; oid: string; name: string }[] =
         [];
-      Object.entries(tree.entries).forEach(([name, entry]) => {
+      for await (const [name, entry] of Object.entries(tree.entries)) {
         if (entry.type === "tree") {
-          const oid = buildTree(entry);
+          const oid = await buildTree(entry);
+          if (oid !== entry.oid) {
+            // console.log("no match", name);
+            // console.log("attempt1x", oid);
+            // console.log("kjwwwreal", entry.oid);
+            if (name === "content-sp") {
+              const isoResult = await git.writeTree({
+                fs,
+                tree: Object.values(entry.entries).map((e) => ({
+                  mode: e.mode,
+                  path: e.name,
+                  oid: e.oid,
+                  type: e.type,
+                })),
+                dir: "some-dir",
+              });
+              // console.log("isoResult", isoResult);
+            }
+          }
           entries.push({ type: "tree", oid, name });
         } else {
           entries.push({ type: "blob", oid: entry.oid, name });
         }
-      });
-      let treeContent = "";
-      entries.forEach((entry) => {
-        // const [mode, type, hash, name] = entry.split(' ');
-        treeContent += `${entry.type === "blob" ? "100644" : "040000"} ${
-          entry.type
-        } ${entry.oid}\t${entry.name}\n`;
-      });
-      console.log(treeContent);
-
-      return crypto.createHash("sha1").update(treeContent).digest("hex");
+      }
+      const buffer = Buffer.concat(
+        entries.map((entry) => {
+          z.object({
+            type: z.enum(["blob", "tree"]),
+            oid: z.string(),
+            name: z.string(),
+          }).parse(entry);
+          const mode =
+            entry.type === "blob"
+              ? Buffer.from("100644")
+              : Buffer.from("40000"); // we store is as 040000 for legibility
+          const space = Buffer.from(" ");
+          const path = Buffer.from(entry.name, "utf8");
+          const nullchar = Buffer.from([0]);
+          const oid = Buffer.from(entry.oid, "hex");
+          return Buffer.concat([mode, space, path, nullchar, oid]);
+        })
+      );
+      const wrapped = Buffer.concat([
+        Buffer.from("tree "),
+        Buffer.from(buffer.length.toString()),
+        Buffer.from([0]),
+        buffer,
+      ]);
+      const result2 = crypto.createHash("sha1").update(wrapped).digest("hex");
+      // Uncomment to check against the isomorphic-git implementation
+      // const isoResult = await git.writeTree({
+      //   fs,
+      //   dir: "some-dir",
+      //   tree: Object.values(tree.entries).map((e) => ({
+      //     mode: e.mode,
+      //     path: e.name,
+      //     oid: e.oid,
+      //     type: e.type,
+      //   })),
+      // });
+      // if (isoResult !== result2) {
+      //   console.log("hmmm", tree.name);
+      // }
+      return result2;
     };
-    const res = buildTree(tree);
-    console.log(res);
+    const res = await buildTree(tree);
 
     return res;
   }
