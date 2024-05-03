@@ -129,5 +129,12 @@ describe("clone", async () => {
     await expect(JSON.stringify(result7, null, 2)).toMatchFileSnapshot(
       "queries/7.json"
     );
+
+    await repo.checkout({ branchName: "feat-1" });
+    const branch3 = await repo.getBranch({ branchName: "feat-1" });
+    const result8 = await branch3.list();
+    await expect(JSON.stringify(result8, null, 2)).toMatchFileSnapshot(
+      "queries/8.json"
+    );
   });
 });
