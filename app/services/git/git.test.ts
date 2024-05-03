@@ -79,6 +79,7 @@ describe("clone", async () => {
     await expect(JSON.stringify(result, null, 2)).toMatchFileSnapshot(
       "queries/1.json"
     );
+    console.log(result.items.length);
 
     await branch.upsert({
       path: "content/movies/movie2.json",
@@ -117,11 +118,16 @@ describe("clone", async () => {
       content: "some-content-4",
     });
 
-    const result6 = await branch.list({ offset: 10 });
+    const result6 = await branch.list();
     await expect(JSON.stringify(result6, null, 2)).toMatchFileSnapshot(
       "queries/6.json"
     );
 
     await repo.checkout({ branchName: "add-it" });
+    const branch2 = await repo.getBranch({ branchName: "add-it" });
+    const result7 = await branch2.list();
+    await expect(JSON.stringify(result7, null, 2)).toMatchFileSnapshot(
+      "queries/7.json"
+    );
   });
 });

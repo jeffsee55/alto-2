@@ -514,7 +514,7 @@ export class Branch {
         // "natural" sorting so assets10.json will come before assets2.json
         return [ops.asc(fields.directory), ops.asc(fields.path)];
       },
-      limit: args?.limit || 10,
+      limit: args?.limit || 50,
       offset: args?.offset || 0,
     });
     return {
