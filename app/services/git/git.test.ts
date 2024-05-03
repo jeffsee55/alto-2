@@ -121,5 +121,7 @@ describe("clone", async () => {
     await expect(JSON.stringify(result6, null, 2)).toMatchFileSnapshot(
       "queries/6.json"
     );
+
+    await repo.checkout({ branchName: "add-it" });
   });
 });

@@ -5,73 +5,73 @@
   "commitOid": "8c73ee30eece361fad17533a1aa50f199d163cb5",
   "items": [
     {
-      "path": "content-sp/directors/director1.json",
+      "path": "content/assets/asset3.json",
       "blob": {
-        "oid": "caa30beb4bf2110187a0617b280949e94480e1cf",
-        "content": "{\n  \"name\": \"Juan Testing\",\n  \"avatar\": \"assets/image-a.avif\",\n  \"agency\": \"agency1\"\n}\n"
+        "oid": "b8b24756cbc16e94042f7fb45b4d738ed9db4782",
+        "content": "{\n  \"url\": \"assets/image-c.avif\",\n  \"title\": \"Image C\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/directors/director2.json",
+      "path": "content/assets/asset4.json",
       "blob": {
-        "oid": "30ef8d0cc0369d194d3de805c378ec5feb936a07",
-        "content": "{\n  \"name\": \"Emilia Johnson\",\n  \"avatar\": \"assets/image-b.avif\",\n  \"agency\": \"agency6\"\n}\n"
+        "oid": "f493c2d3f9be87af1ba3f6b4180871b29a364b14",
+        "content": "{\n  \"url\": \"assets/image-d.avif\",\n  \"title\": \"Image D\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/directors/director3.json",
+      "path": "content/assets/asset5.json",
       "blob": {
-        "oid": "7471203e5b264673d247848071e3ae5ad31d08c4",
-        "content": "{\n  \"name\": \"Jada Rubrick\",\n  \"avatar\": \"assets/image-c.avif\",\n  \"agency\": \"agency6\"\n}\n"
+        "oid": "e9f3f2e1a0451279af31e7513a491a31927c16af",
+        "content": "{\n  \"url\": \"assets/image-f.avif\",\n  \"title\": \"Image F\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/hero/hero1.json",
+      "path": "content/assets/asset6.json",
       "blob": {
-        "oid": "bba7d32d1c1d2e03f88508e96269d059e604d45f",
-        "content": "{ \"type\": \"hero\", \"message\": \"myhero\" }\n"
+        "oid": "0c8721b860a46d1f2c75d33b273449655768ea1b",
+        "content": "{\n  \"url\": \"assets/image-g.avif\",\n  \"title\": \"Image G\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/movies/movie1.json",
+      "path": "content/assets/asset7.json",
       "blob": {
-        "oid": "3029eaf1cb7aa226aed3ab671854843cf91c24da",
-        "content": "{\n  \"title\": \"La Adventure Begins, now!\",\n  \"description\": \"Let the new adventure begin\",\n  \"year\": 2022,\n  \"director\": \"content/directors/director2.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew1.md\"],\n  \"similarMovies\": [\"content/movies/movie2\"]\n}\n"
+        "oid": "cbe9a06cae77f25cd6567f1b951cfc80f6e28703",
+        "content": "{\n  \"url\": \"assets/image-h.avif\",\n  \"title\": \"Image H\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/movies/movie2.json",
+      "path": "content/assets/asset8.json",
       "blob": {
-        "oid": "7d7649ab3bd83c9cef7b4b8c0d95bfccec98fe6f",
-        "content": "{\n  \"title\": \"Dreamlandia!\",\n  \"description\": \"A movie about dreams\",\n  \"year\": 2023,\n  \"director\": \"content/directors/director1.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew4.md\"]\n}\n"
+        "oid": "50279b021970165350b7796e0d304e03bb18e7b2",
+        "content": "{\n  \"url\": \"assets/image-i.avif\",\n  \"title\": \"Image I\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/movies/movie3.json",
+      "path": "content/assets/asset9.json",
       "blob": {
-        "oid": "f3f33ba72080106522db6e27116040012ba66f64",
-        "content": "{\n  \"title\": \"Come Ovejas\",\n  \"description\": \"That's what the holidays are all about\",\n  \"year\": 2020,\n  \"director\": \"content/directors/director3.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew1.md\"]\n}\n"
+        "oid": "27884b4e329d67041880383c25ddf7b27e6f0a95",
+        "content": "{\n  \"url\": \"assets/image-j.avif\",\n  \"title\": \"Image J\",\n  \"favoriteMovie\": \"content/movies/movie1.json\"\n}\n"
       }
     },
     {
-      "path": "content-sp/page/page1.json",
+      "path": "content/crew/crew1.md",
       "blob": {
-        "oid": "3763eac0ee829c4918a637627b4a0ee181cc12d8",
-        "content": "{\n  \"title\": \"The Adventure Begins\",\n  \"movie\": \"content/movies/movie1.json\",\n  \"blocks\": [\n    { \"type\": \"hero\", \"title\": \"This is some info about us\" },\n    { \"type\": \"cta\", \"title\": \"Sign Up Today\" },\n    {\n      \"type\": \"quote\",\n      \"message\": \"Theyre great\",\n      \"author\": \"content/actors/actor1.md\"\n    }\n  ]\n}\n"
+        "oid": "9892a1787b903c17e8656be0ad16c0aa1d70de97",
+        "content": "---\nname: Sarah Adams\nrole: Cinematographer\n---\n\nHello, world!\n\nOther info here\n"
       }
     },
     {
-      "path": "content-sp/page/page2.json",
+      "path": "content/crew/crew2.md",
       "blob": {
-        "oid": "4a2b680f6cec31d54f6aa9d3e62ec7ac24ea153c",
-        "content": "{\n  \"title\": \"About us\",\n  \"blocks\": [\n    {\n      \"type\": \"quote\",\n      \"message\": \"Update this\",\n      \"author\": \"content/actors/actor2.md\"\n    },\n    { \"type\": \"cta\", \"title\": \"Sign Up Today\" }\n  ]\n}\n"
+        "oid": "9c0c738e16d742218e2d7bf58fcd4c6d041dd942",
+        "content": "---\nname: Michael Lee\nrole: Editor\n---\n\nHello, world!\n\nOther info here\n"
       }
     },
     {
-      "path": "content-sp/page2/page21.json",
+      "path": "content/crew/crew3.md",
       "blob": {
-        "oid": "638d427299bb3110013567e8649af5f121a69233",
-        "content": "{\n  \"title\": \"The Adventure Begins\",\n  \"blocks\": [\"content/cta/cta1.json\", \"content/hero/hero1.json\"]\n}\n"
+        "oid": "2fac3c33defbecfcc25811587f65ac8fc980b8a6",
+        "content": "---\nname: Robert Johnson\nrole: Production Designer\n---\n\nHello, world!\n\nOther info here\n"
       }
     }
   ]

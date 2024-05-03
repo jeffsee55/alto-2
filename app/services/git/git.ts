@@ -6,7 +6,7 @@ import * as git from "isomorphic-git";
 import {} from "isomorphic-git";
 import fs from "fs";
 import { exec } from "child_process";
-import { sep } from "path";
+import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
 
 type DB = BetterSQLite3Database<typeof schema>;
@@ -51,6 +51,7 @@ export class GitExec {
     await this.db.insert(tables.blobsToBranches).values({
       blobOid: args.oid,
       path: args.path,
+      directory: createSortableDirectoryPath(args.path),
       orgName: this.orgName,
       repoName: this.repoName,
       branchName: args.branchName,
@@ -346,15 +347,24 @@ export class Repo {
   }) {
     const repo = new Repo(args);
     await repo.initialize();
-    const gitExec = new GitExec(args);
+    return repo.checkout({ branchName: args.branchName });
+  }
+
+  async checkout(args: { branchName: string }) {
+    const gitExec = new GitExec({
+      db: this.db,
+      orgName: this.orgName,
+      repoName: this.repoName,
+      localPath: this.localPath,
+    });
     const cloneResult = await gitExec.clone({ branchName: args.branchName });
-    const firstCommit = await repo.createCommit(cloneResult);
-    const branch = await repo.createBranch({
+    const firstCommit = await this.createCommit(cloneResult);
+    const branch = await this.createBranch({
       branchName: args.branchName,
       commit: await firstCommit.oid(),
     });
     await branch.createBlobs();
-    return repo;
+    return this;
   }
 
   async initialize() {
@@ -499,8 +509,13 @@ export class Branch {
       with: {
         blob: true,
       },
+      orderBy(fields, ops) {
+        // FIXME: One limitation of this is that it doesn't follow
+        // "natural" sorting so assets10.json will come before assets2.json
+        return [ops.asc(fields.directory), ops.asc(fields.path)];
+      },
       limit: args?.limit || 10,
-      offset: args?.offset || 10,
+      offset: args?.offset || 0,
     });
     return {
       orgName: this.orgName,
@@ -610,6 +625,7 @@ export class Branch {
     await this.db.insert(tables.blobsToBranches).values({
       blobOid: blobOid,
       path: args.path,
+      directory: createSortableDirectoryPath(args.path),
       orgName: this.orgName,
       repoName: this.repoName,
       branchName: this.branchName,
@@ -790,4 +806,8 @@ type BlobType = {
   mode: "100644";
   oid: string;
   name: string;
+};
+
+const createSortableDirectoryPath = (path: string) => {
+  return pathParse(path).dir.replace(/\//g, " ");
 };

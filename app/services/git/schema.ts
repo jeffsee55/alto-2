@@ -58,6 +58,7 @@ export const blobsToBranches = sqliteTable(
       .notNull()
       .references(() => blobs.oid),
     path: text("path").notNull(),
+    directory: text("directory").notNull(),
   },
   (table) => {
     return {
