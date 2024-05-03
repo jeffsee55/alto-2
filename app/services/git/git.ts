@@ -178,7 +178,6 @@ export class GitExec {
 
   static async buildCommitHash(args: {
     message: string;
-    blobMap: Record<string, string>;
     tree: TreeType;
     dir: string;
   }) {
@@ -239,44 +238,8 @@ export class GitExec {
 
     return res;
   }
-  static async buildBlobMapFromLsTree({
-    ref,
-    dir,
-  }: {
-    ref: string;
-    dir: string;
-  }) {
-    const lsTree = await GitExec._lsTree({
-      ref: ref,
-      dir: dir,
-    });
-    if (typeof lsTree !== "string") {
-      throw new Error(`Unexpected response from ls-tree: ${lsTree}`);
-    }
-    const lines = lsTree.split("\n");
-
-    const blobMap: Record<string, string> = {};
-
-    lines.forEach((lineString) => {
-      const [, type, oidAndPath] = lineString.split(" ");
-      if (oidAndPath) {
-        const [oid, filepath] = oidAndPath.split("\t");
-        if (type === "blob") {
-          if (filepath.endsWith(".json") || filepath.endsWith(".md")) {
-            blobMap[filepath] = oid;
-          }
-        }
-      }
-    });
-    return { blobMap };
-  }
 
   async clone(args: { branchName: string }) {
-    const { blobMap } = await GitExec.buildBlobMapFromLsTree({
-      ref: args.branchName,
-      dir: this.dir,
-    });
-
     const commitInfo = await GitExec.getCommitForBranch({
       branch: args.branchName,
       dir: this.dir,
@@ -291,7 +254,6 @@ export class GitExec {
       commit: {
         content: commitInfo.commit.message,
         oid: commitInfo.oid,
-        blobMap,
       },
     };
     return cloneResult;
@@ -431,7 +393,7 @@ export class Repo {
 
   async createCommit(args: {
     branchName: string;
-    commit: { content: string; oid: string; blobMap: Record<string, string> };
+    commit: { content: string; oid: string };
   }) {
     const commit = new Commit({
       db: this.db,
@@ -531,9 +493,6 @@ export class Branch {
   async delete(args: { path: string }) {
     const currentCommit = await this.currentCommit();
 
-    const blobMap = currentCommit.blobMap;
-
-    delete blobMap[args.path];
     const tree = currentCommit.tree;
     GitExec.removeFromTree({ tree, path: args.path });
 
@@ -541,7 +500,6 @@ export class Branch {
       org: this.org,
       name: this.repoName,
       db: this.db,
-      blobMap,
       message: `Deleted ${args.path}`,
       localPath: this.localPath,
       tree: tree,
@@ -572,14 +530,12 @@ export class Branch {
 
   async upsert(args: { path: string; content: string }) {
     // It's important that this instance isn't kept around,
-    // since we're mutating the blobMap in-place for
+    // since we're mutating the tree in-place for
     // performance reasons
     const currentCommit = await this.currentCommit();
 
     const blobOid = await GitExec.hashBlob(args.content);
 
-    const blobMap = currentCommit.blobMap;
-    blobMap[args.path] = blobOid;
     const tree = currentCommit.tree;
     GitExec.updateTree({ blobOid, tree, path: args.path });
 
@@ -587,7 +543,6 @@ export class Branch {
       org: this.org,
       name: this.repoName,
       db: this.db,
-      blobMap,
       message: `Autosave of ${args.path}`,
       localPath: this.localPath,
       tree: tree,
@@ -716,7 +671,6 @@ export class Commit {
   db: BetterSQLite3Database<typeof schema>;
 
   content: string;
-  blobMap: Record<string, string>;
   tree: TreeType;
   localPath: string;
 
@@ -725,7 +679,6 @@ export class Commit {
     name: string;
     db: BetterSQLite3Database<typeof schema>;
     message: string;
-    blobMap: Record<string, string>;
     localPath: string;
     tree: TreeType;
   }) {
@@ -733,7 +686,6 @@ export class Commit {
     this.name = args.name;
     this.db = args.db;
     this.content = args.message;
-    this.blobMap = args.blobMap;
     this.localPath = args.localPath;
     this.tree = args.tree;
   }
@@ -744,11 +696,9 @@ export class Commit {
     db: DB;
     content: string;
     oid: string;
-    blobMap: string;
     tree: string;
     localPath: string;
   }) {
-    const blobMap = z.record(z.string()).parse(JSON.parse(value.blobMap));
     const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
     return new Commit({
       name: value.name,
@@ -756,7 +706,6 @@ export class Commit {
       db: value.db,
       message: value.content,
       localPath: value.localPath,
-      blobMap,
       tree: tree,
     });
   }
@@ -764,7 +713,6 @@ export class Commit {
   async oid() {
     const oid = await GitExec.buildCommitHash({
       message: this.content,
-      blobMap: this.blobMap,
       dir: this.localPath,
       tree: this.tree,
     });
@@ -776,7 +724,6 @@ export class Commit {
     await this.db.insert(tables.commits).values({
       content: this.content,
       oid,
-      blobMap: JSON.stringify(this.blobMap),
       tree: JSON.stringify(this.tree),
     });
   }

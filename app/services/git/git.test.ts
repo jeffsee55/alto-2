@@ -18,7 +18,7 @@ largeRepoPath;
  * This strategy uses a combination of where the source of truth is
  * for the tree / commit / ref relationships are housed.
  *
- * The commit stores a "blobMap" object which contains the mappings
+ * The commit stores a "tree" object which contains the mappings
  * of paths to the actual objects. This is the canonical source
  * of truth for when we need to build a git commit
  *
