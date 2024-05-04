@@ -13,6 +13,17 @@ import tmp from "tmp-promise";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
+// export const movieRepoPath = "/Users/jeffsee/code/movie-content";
+export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";
+export const movieRepoConfig = {
+  orgName: "jeffsee55",
+  repoName: "movie-content-private",
+};
+// export const movieRepoConfig = {
+//   orgName: "jeffsee55",
+//   repoName: "movie-content",
+// };
+
 export class GitExec {
   cache: Record<string, unknown> = {};
   orgName: string;

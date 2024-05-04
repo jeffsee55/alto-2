@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
-import { Repo } from "./git";
+import { Repo, movieRepoPath, moveRepoConfig } from "./git";
 import { loadDatabase } from "./database";
 
 tmp.setGracefulCleanup();
 
 const TEST_SQLITE = "test.sqlite";
-const movieRepoPath = "/Users/jeffsee/code/movie-content";
 const largeRepoPath = "/Users/jeffsee/code/smashing-magazine";
 largeRepoPath;
 
@@ -60,8 +59,7 @@ describe("clone", async () => {
     });
 
     const repo = await Repo.clone({
-      orgName: "jeffsee55",
-      repoName: "movie-content",
+      ...moveRepoConfig,
       db,
       dir: movieRepoPath,
       branchName: "main",

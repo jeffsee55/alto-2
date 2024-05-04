@@ -1,8 +1,7 @@
 import { loadDatabase } from "~/services/git/database";
-import { Repo } from "~/services/git/git";
+import { Repo, movieRepoPath, movieRepoConfig } from "~/services/git/git";
 import { tables } from "~/services/git/schema";
 
-const movieRepoPath = "/Users/jeffsee/code/movie-content";
 const { db } = loadDatabase();
 
 const clone = async () => {
@@ -10,8 +9,7 @@ const clone = async () => {
     await db.delete(table).run();
   }
   await Repo.clone({
-    orgName: "jeffsee55",
-    repoName: "movie-content",
+    ...movieRepoConfig,
     db,
     branchName: "main",
     dir: movieRepoPath,

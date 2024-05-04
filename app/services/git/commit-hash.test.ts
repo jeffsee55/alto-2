@@ -1,7 +1,5 @@
 import { it, expect } from "vitest";
-import { GitExec } from "./git";
-
-const movieRepoPath = "/Users/jeffsee/code/movie-content";
+import { GitExec, movieRepoPath } from "./git";
 
 it("creates the correct commit hash", async () => {
   const tree = await GitExec.buildCommitTree({
