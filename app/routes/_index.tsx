@@ -7,8 +7,7 @@ import {
   HomeIcon,
   SearchIcon,
 } from "lucide-react";
-import { Repo } from "~/services/git/git";
-import { tables } from "~/services/git/schema";
+import { Repo, movieRepoPath, movieRepoConfig } from "~/services/git/git";
 import { Link, useLoaderData } from "@remix-run/react";
 import { loadDatabase } from "~/services/git/database";
 
@@ -20,14 +19,12 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader() {
-  const movieRepoPath = "/Users/jeffsee/code/movie-content";
   const { db } = loadDatabase();
   // for await (const table of Object.values(tables)) {
   //   await db.delete(table).run();
   // }
   const repo = await Repo.init({
-    orgName: "jeffsee55",
-    repoName: "movie-content",
+    ...movieRepoConfig,
     db,
     dir: movieRepoPath,
     branchName: "main",
@@ -41,6 +38,8 @@ export async function loader() {
 
 export default function Index() {
   const data = useLoaderData<typeof loader>();
+
+  console.log(JSON.stringify(data));
   return (
     <div className="h-screen w-screen bg-zinc-900 text-white flex flex-col">
       <div className="h-16 w-full border-b border-zinc-800 flex justify-between items-center">
@@ -145,9 +144,7 @@ export default function Index() {
                   </div>
                 </div>
                 <div className="flex gap-4">
-                  <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col overflow-hidden">
-                    {JSON.stringify(data)}
-                  </div>
+                  <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col overflow-hidden"></div>
                   <div className="w-64 h-96 rounded-lg bg-[#453d4c]"></div>
                 </div>
               </div>

@@ -13,6 +13,17 @@ import tmp from "tmp-promise";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
+// export const movieRepoPath = "/Users/jeffsee/code/movie-content";
+export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";
+// export const movieRepoConfig = {
+//   orgName: "jeffsee55",
+//   repoName: "movie-content-private",
+// };
+export const movieRepoConfig = {
+  orgName: "jeffsee55",
+  repoName: "movie-content",
+};
+
 export class GitExec {
   cache: Record<string, unknown> = {};
   orgName: string;
@@ -257,21 +268,38 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
-    const tmpDir = tmp.dirSync({ unsafeCleanup: true });
-    console.log("cloning into...", tmpDir.name);
+    const real = false;
+    if (real) {
+      const tmpDir = tmp.dirSync({ unsafeCleanup: true });
+      console.log("cloning into...", tmpDir.name);
 
-    await git.clone({
-      fs,
-      dir: tmpDir.name,
-      http: http,
-      depth: 1,
-      ref: args.branchName,
-      url: `https://github.com/jeffsee55/movie-content`,
-    });
+      // Example curl command for reference
+      // curl -I \
+      // -H "Accept: application/vnd.github+json" \
+      // -H "Authorization: Bearer github_pat_123" \
+      // -H "X-GitHub-Api-Version: 2022-11-28" \
+      // https://raw.githubusercontent.com/jeffsee55/movie-content-private/main/assets/image-a.avif
 
-    const dir = await fs.promises.readdir(tmpDir.name);
-    this.dir = tmpDir.name;
-    console.log("tempdir contents", dir);
+      try {
+        const token = "some-token";
+        await git.clone({
+          fs,
+          dir: tmpDir.name,
+          http: http,
+          depth: 1,
+          ref: args.branchName,
+          // This isn't how the documentation reads but found this here
+          // https://github.com/isomorphic-git/isomorphic-git/issues/1722#issuecomment-1783339875
+          url: `https://${token}:@github.com/jeffsee55/movie-content-private`,
+        });
+      } catch (e) {
+        console.log(e);
+      }
+
+      const dir = await fs.promises.readdir(tmpDir.name);
+      this.dir = tmpDir.name;
+      console.log("tempdir contents", dir);
+    }
     // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
     const commitInfo = await this.getCommitForBranch({
       branch: args.branchName,
@@ -848,3 +876,51 @@ type BlobType = {
 const createSortableDirectoryPath = (path: string) => {
   return pathParse(path).dir.replace(/\//g, " ");
 };
+
+// Github rate limit
+
+// curl \
+//   -H "Accept: application/vnd.github+json" \
+//   -H "Authorization: Bearer github_pat_123" \
+//   https://api.github.com/rate_limit
+
+// {
+//   "resources": {
+//     "core": {
+//       "limit": 5000,
+//       "remaining": 4999,
+//       "reset": 1372700873,
+//       "used": 1
+//     },
+//     "search": {
+//       "limit": 30,
+//       "remaining": 18,
+//       "reset": 1372697452,
+//       "used": 12
+//     },
+//     "graphql": {
+//       "limit": 5000,
+//       "remaining": 4993,
+//       "reset": 1372700389,
+//       "used": 7
+//     },
+//     "integration_manifest": {
+//       "limit": 5000,
+//       "remaining": 4999,
+//       "reset": 1551806725,
+//       "used": 1
+//     },
+//     "code_scanning_upload": {
+//       "limit": 500,
+//       "remaining": 499,
+//       "reset": 1551806725,
+//       "used": 1
+//     }
+//   },
+//   "rate": {
+//     "limit": 5000,
+//     "remaining": 4999,
+//     "reset": 1372700873,
+//     "used": 1
+//   }
+// }
