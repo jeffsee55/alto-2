@@ -4,7 +4,7 @@ import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
-import http from "isomorphic-git/http/node";
+import * as http from "isomorphic-git/http/node";
 import fs from "fs";
 import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
