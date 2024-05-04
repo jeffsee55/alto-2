@@ -9,8 +9,6 @@ const credentials = {
   authToken: process.env.TURSO_AUTH_TOKEN!,
 };
 
-console.log("credentials", credentials);
-
 export const dbSetup = () => {
   const libsql = createClient(credentials);
 
