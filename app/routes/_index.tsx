@@ -1,5 +1,6 @@
 import type { MetaFunction } from "@remix-run/node";
 import { clsx } from "clsx";
+import SQLiteDatabase from "better-sqlite3";
 import {
   BoltIcon,
   ChevronRightIcon,
@@ -7,6 +8,9 @@ import {
   HomeIcon,
   SearchIcon,
 } from "lucide-react";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { schema, tables } from "~/services/git/schema";
+import { Repo } from "~/services/git/git";
 
 export const meta: MetaFunction = () => {
   return [
@@ -14,6 +18,28 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "Welcome to Remix!" },
   ];
 };
+
+export async function loader() {
+  const TEST_SQLITE = "test.sqlite";
+  const movieRepoPath = "/Users/jeffsee/code/movie-content";
+  const sqlite = new SQLiteDatabase(TEST_SQLITE);
+  const db = drizzle(sqlite, { schema: schema });
+  for await (const table of Object.values(tables)) {
+    db.delete(table).run();
+  }
+  const repo = await Repo.clone({
+    orgName: "jeffsee55",
+    repoName: "movie-content",
+    localPath: movieRepoPath,
+    db,
+    branchName: "main",
+  });
+  const branch = await repo.getBranch({ branchName: "main" });
+
+  const result = await branch.list();
+  console.log(result.items);
+  return result;
+}
 
 export default function Index() {
   return (
