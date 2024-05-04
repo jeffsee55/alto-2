@@ -109,10 +109,10 @@ export class GitExec {
     return args.tree;
   }
 
-  static async getCommitForBranch(args: { branch: string; dir: string }) {
+  async getCommitForBranch(args: { branch: string }) {
     const commitOid = await git.resolveRef({
       fs,
-      dir: args.dir,
+      dir: this.dir,
       ref: args.branch,
     });
 
@@ -122,26 +122,16 @@ export class GitExec {
 
     const commit = await git.readCommit({
       fs,
-      dir: args.dir,
+      dir: this.dir,
       oid: commitOid,
     });
     return commit;
   }
   async buildCommitTree(args: { branch: string }): Promise<TreeType> {
-    return GitExec.buildCommitTree({ branch: args.branch, dir: this.dir });
-  }
-
-  static async buildCommitTree(args: {
-    branch: string;
-    dir: string;
-  }): Promise<TreeType> {
-    const dir = args.dir;
     const ref = args.branch;
-    const lsTree = await GitExec._lsTree({ ref, dir });
-    // console.log("lsTree", lsTree);
-    const commitInfo = await GitExec.getCommitForBranch({
+    const lsTree = await this._lsTree({ ref });
+    const commitInfo = await this.getCommitForBranch({
       branch: ref,
-      dir: dir,
     });
 
     if (typeof lsTree === "string") {
@@ -265,9 +255,8 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
-    const commitInfo = await GitExec.getCommitForBranch({
+    const commitInfo = await this.getCommitForBranch({
       branch: args.branchName,
-      dir: this.dir,
     });
 
     const cloneResult = {
@@ -280,11 +269,11 @@ export class GitExec {
     return cloneResult;
   }
 
-  static async _lsTree({ ref, dir }: { ref: string; dir: string }) {
+  async _lsTree({ ref }: { ref: string }) {
     return new Promise((resolve, reject) => {
       exec(
         `git ls-tree ${ref} -r -t`,
-        { cwd: dir, maxBuffer: 1024 * 5000 },
+        { cwd: this.dir, maxBuffer: 1024 * 5000 },
         async (error, stdout, stderr) => {
           if (error) {
             reject(`Error listing branches: ${error}`);
