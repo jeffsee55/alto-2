@@ -21,13 +21,13 @@ export class GitExec {
   constructor(args: {
     orgName: string;
     repoName: string;
-    localPath: string;
+    dir: string;
     db: DB;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
-    this.dir = args.localPath;
+    this.dir = args.dir;
   }
 
   static async hashBlob(content: string) {
@@ -127,6 +127,9 @@ export class GitExec {
     });
     return commit;
   }
+  async buildCommitTree(args: { branch: string }): Promise<TreeType> {
+    return GitExec.buildCommitTree({ branch: args.branch, dir: this.dir });
+  }
 
   static async buildCommitTree(args: {
     branch: string;
@@ -135,6 +138,7 @@ export class GitExec {
     const dir = args.dir;
     const ref = args.branch;
     const lsTree = await GitExec._lsTree({ ref, dir });
+    // console.log("lsTree", lsTree);
     const commitInfo = await GitExec.getCommitForBranch({
       branch: ref,
       dir: dir,
@@ -189,6 +193,12 @@ export class GitExec {
     } else {
       throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
     }
+  }
+  async buildCommitHash(args: { message: string; tree: TreeType }) {
+    return GitExec.buildCommitHash({
+      ...args,
+      dir: this.dir,
+    });
   }
 
   static async buildCommitHash(args: {
@@ -260,10 +270,6 @@ export class GitExec {
       dir: this.dir,
     });
 
-    /**
-     * When we're not working locally, we'll first need to clone into
-     * a temp dir, and set that value to the localPath
-     */
     const cloneResult = {
       branchName: args.branchName,
       commit: {
@@ -318,19 +324,21 @@ export class GitExec {
 export class Repo {
   orgName: string;
   repoName: string;
-  localPath: string;
+
   db: DB;
+  gitExec: GitExec;
 
   constructor(args: {
     orgName: string;
     repoName: string;
-    localPath: string;
+
     db: DB;
+    gitExec: GitExec;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
-    this.localPath = args.localPath;
+    this.gitExec = args.gitExec;
   }
 
   static async clone(args: {
@@ -341,9 +349,10 @@ export class Repo {
      * is provided, a clone will be performed and stored
      * into a temporary directory
      */
-    localPath: string;
+
     db: DB;
     branchName: string;
+    gitExec: GitExec;
   }) {
     const repo = new Repo(args);
     await repo.initialize();
@@ -351,12 +360,7 @@ export class Repo {
   }
 
   async checkout(args: { branchName: string }) {
-    const gitExec = new GitExec({
-      db: this.db,
-      orgName: this.orgName,
-      repoName: this.repoName,
-      localPath: this.localPath,
-    });
+    const gitExec = this.gitExec;
     const cloneResult = await gitExec.clone({ branchName: args.branchName });
     const firstCommit = await this.createCommit(cloneResult);
     const branch = await this.createBranch({
@@ -368,9 +372,13 @@ export class Repo {
   }
 
   async initialize() {
-    await this.db
-      .insert(tables.repos)
-      .values({ orgName: this.orgName, repoName: this.repoName });
+    try {
+      await this.db
+        .insert(tables.repos)
+        .values({ orgName: this.orgName, repoName: this.repoName });
+    } catch (e) {
+      console.log(e);
+    }
   }
   async createBranch({
     branchName,
@@ -385,7 +393,7 @@ export class Repo {
       orgName: this.orgName,
       branchName,
       commit: commit,
-      localPath: this.localPath,
+      gitExec: this.gitExec,
     });
     await branch.save();
     return branch;
@@ -402,7 +410,7 @@ export class Repo {
     });
     if (!branchRecord) {
       throw new Error(
-        `Unable to find database record for branch branch ${args.branchName}, in repo ${this.orgName}:${this.repoName}`
+        `Unable to find database record for branch ${args.branchName}, in repo ${this.orgName}:${this.repoName}`
       );
     }
     return Branch.fromRecord({
@@ -411,7 +419,7 @@ export class Repo {
       name: args.branchName,
       repoName: this.repoName,
       orgName: this.orgName,
-      localPath: this.localPath,
+      gitExec: this.gitExec,
     });
   }
 
@@ -425,11 +433,10 @@ export class Repo {
       orgName: this.orgName,
       ...args.commit,
       message: args.commit.content,
-      localPath: this.localPath,
-      tree: await GitExec.buildCommitTree({
+      tree: await this.gitExec.buildCommitTree({
         branch: args.branchName,
-        dir: this.localPath,
       }),
+      gitExec: this.gitExec,
     });
     await commit.save();
     return commit;
@@ -442,7 +449,8 @@ export class Branch {
   db: DB;
   branchName: string;
   commitOid: string;
-  localPath: string;
+
+  gitExec: GitExec;
 
   constructor(args: {
     orgName: string;
@@ -450,23 +458,25 @@ export class Branch {
     db: DB;
     branchName: string;
     commit: string;
-    localPath: string;
+
+    gitExec: GitExec;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
     this.branchName = args.branchName;
     this.commitOid = args.commit;
-    this.localPath = args.localPath;
+    this.gitExec = args.gitExec;
   }
 
   static fromRecord(value: {
     name: string;
     orgName: string;
     db: DB;
-    localPath: string;
+
     commit: string;
     repoName: string;
+    gitExec: GitExec;
   }) {
     return new Branch({
       branchName: value.name,
@@ -474,7 +484,7 @@ export class Branch {
       db: value.db,
       commit: value.commit,
       repoName: value.repoName,
-      localPath: value.localPath,
+      gitExec: value.gitExec,
     });
   }
 
@@ -561,8 +571,8 @@ export class Branch {
       repoName: this.repoName,
       db: this.db,
       message: `Deleted ${args.path}`,
-      localPath: this.localPath,
       tree: tree,
+      gitExec: this.gitExec,
     });
 
     await commit.save();
@@ -604,8 +614,8 @@ export class Branch {
       repoName: this.repoName,
       db: this.db,
       message: `Autosave of ${args.path}`,
-      localPath: this.localPath,
       tree: tree,
+      gitExec: this.gitExec,
     });
     await commit.save();
 
@@ -691,7 +701,7 @@ export class Branch {
       repoName: this.repoName,
       orgName: this.orgName,
       db: this.db,
-      localPath: this.localPath,
+      gitExec: this.gitExec,
       ...commitRecord,
     });
   }
@@ -699,12 +709,7 @@ export class Branch {
   async createBlobs() {
     const currentCommit = await this.currentCommit();
 
-    const gitExec = new GitExec({
-      db: this.db,
-      repoName: this.repoName,
-      orgName: this.orgName,
-      localPath: this.localPath,
-    });
+    const gitExec = this.gitExec;
 
     const walkTree = async (tree: TreeType, parentPath?: string) => {
       for await (const [name, entry] of Object.entries(tree.entries)) {
@@ -733,22 +738,24 @@ export class Commit {
 
   content: string;
   tree: TreeType;
-  localPath: string;
+
+  gitExec: GitExec;
 
   constructor(args: {
     orgName: string;
     repoName: string;
     db: DB;
     message: string;
-    localPath: string;
+
     tree: TreeType;
+    gitExec: GitExec;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
     this.content = args.message;
-    this.localPath = args.localPath;
     this.tree = args.tree;
+    this.gitExec = args.gitExec;
   }
 
   static fromRecord(value: {
@@ -758,7 +765,8 @@ export class Commit {
     content: string;
     oid: string;
     tree: string;
-    localPath: string;
+
+    gitExec: GitExec;
   }) {
     const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
     return new Commit({
@@ -766,15 +774,14 @@ export class Commit {
       orgName: value.orgName,
       db: value.db,
       message: value.content,
-      localPath: value.localPath,
       tree: tree,
+      gitExec: value.gitExec,
     });
   }
 
   async oid() {
-    const oid = await GitExec.buildCommitHash({
+    const oid = await this.gitExec.buildCommitHash({
       message: this.content,
-      dir: this.localPath,
       tree: this.tree,
     });
     return oid;

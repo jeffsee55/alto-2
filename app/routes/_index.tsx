@@ -7,8 +7,7 @@ import {
   HomeIcon,
   SearchIcon,
 } from "lucide-react";
-import { tables } from "~/services/git/schema";
-import { Repo } from "~/services/git/git";
+import { GitExec, Repo } from "~/services/git/git";
 import { Link, useLoaderData } from "@remix-run/react";
 import { loadDatabase } from "~/services/git/database";
 
@@ -22,15 +21,17 @@ export const meta: MetaFunction = () => {
 export async function loader() {
   const movieRepoPath = "/Users/jeffsee/code/movie-content";
   const { db } = loadDatabase();
-  for await (const table of Object.values(tables)) {
-    await db.delete(table).run();
-  }
-  const repo = await Repo.clone({
+  const gitExec = new GitExec({
     orgName: "jeffsee55",
     repoName: "movie-content",
-    localPath: movieRepoPath,
+    dir: movieRepoPath,
     db,
-    branchName: "main",
+  });
+  const repo = new Repo({
+    orgName: "jeffsee55",
+    repoName: "movie-content",
+    db,
+    gitExec,
   });
   const branch = await repo.getBranch({ branchName: "main" });
 
