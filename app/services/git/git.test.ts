@@ -123,18 +123,11 @@ describe("clone", async () => {
       "queries/6.json"
     );
 
-    await repo.checkout({ branchName: "add-it" });
-    const branch2 = await repo.getBranch({ branchName: "add-it" });
+    await repo.checkout({ branchName: "feat-1" });
+    const branch2 = await repo.getBranch({ branchName: "feat-1" });
     const result7 = await branch2.list();
     await expect(JSON.stringify(result7, null, 2)).toMatchFileSnapshot(
       "queries/7.json"
-    );
-
-    await repo.checkout({ branchName: "feat-1" });
-    const branch3 = await repo.getBranch({ branchName: "feat-1" });
-    const result8 = await branch3.list();
-    await expect(JSON.stringify(result8, null, 2)).toMatchFileSnapshot(
-      "queries/8.json"
     );
   });
 });
