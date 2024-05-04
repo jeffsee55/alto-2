@@ -349,14 +349,40 @@ export class Repo {
      * is provided, a clone will be performed and stored
      * into a temporary directory
      */
-
+    dir: string;
     db: DB;
     branchName: string;
-    gitExec: GitExec;
   }) {
-    const repo = new Repo(args);
+    const gitExec = new GitExec({
+      orgName: args.orgName,
+      repoName: args.repoName,
+      db: args.db,
+      dir: args.dir,
+    });
+    const repo = new Repo({ ...args, gitExec });
     await repo.initialize();
     return repo.checkout({ branchName: args.branchName });
+  }
+
+  static async init(args: {
+    orgName: string;
+    repoName: string;
+    /**
+     * The path to the Git repo on your machine, if no path
+     * is provided, a clone will be performed and stored
+     * into a temporary directory
+     */
+    dir: string;
+    db: DB;
+    branchName: string;
+  }) {
+    const gitExec = new GitExec({
+      orgName: args.orgName,
+      repoName: args.repoName,
+      db: args.db,
+      dir: args.dir,
+    });
+    return new Repo({ ...args, gitExec });
   }
 
   async checkout(args: { branchName: string }) {
@@ -372,13 +398,10 @@ export class Repo {
   }
 
   async initialize() {
-    try {
-      await this.db
-        .insert(tables.repos)
-        .values({ orgName: this.orgName, repoName: this.repoName });
-    } catch (e) {
-      console.log(e);
-    }
+    await this.db
+      .insert(tables.repos)
+      .values({ orgName: this.orgName, repoName: this.repoName })
+      .onConflictDoNothing();
   }
   async createBranch({
     branchName,

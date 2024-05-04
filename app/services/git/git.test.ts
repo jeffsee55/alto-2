@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
-import { GitExec, Repo } from "./git";
+import { Repo } from "./git";
 import { loadDatabase } from "./database";
 
 tmp.setGracefulCleanup();
@@ -59,18 +59,11 @@ describe("clone", async () => {
       // repoPath: largeRepoPath,
     });
 
-    const gitExec = new GitExec({
-      orgName: "jeffsee55",
-      repoName: "movie-content",
-      dir: movieRepoPath,
-      db,
-    });
-
     const repo = await Repo.clone({
       orgName: "jeffsee55",
       repoName: "movie-content",
       db,
-      gitExec,
+      dir: movieRepoPath,
       branchName: "main",
     });
 
