@@ -1,4 +1,5 @@
-import { LinksFunction } from "@remix-run/node";
+// import { LinksFunction } from "@remix-run/node";
+import { LinksFunction } from "@vercel/remix";
 import {
   Links,
   Meta,

@@ -23,6 +23,7 @@
     "@remix-run/node": "^2.8.1",
     "@remix-run/react": "^2.8.1",
     "@remix-run/serve": "^2.8.1",
+    "@vercel/remix": "^2.9.1",
     "async-lock": "^1.1.0",
     "better-sqlite3": "^9.5.0",
     "clean-git-ref": "^2.0.1",
