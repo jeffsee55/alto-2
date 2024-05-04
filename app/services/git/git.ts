@@ -4,10 +4,12 @@ import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
+import http from "isomorphic-git/http/node";
 import fs from "fs";
 import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
+import tmp from "tmp-promise";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
@@ -255,6 +257,22 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
+    const tmpDir = tmp.dirSync({ unsafeCleanup: true });
+    console.log("cloning into...", tmpDir.name);
+
+    await git.clone({
+      fs,
+      dir: tmpDir.name,
+      http: http,
+      depth: 1,
+      ref: args.branchName,
+      url: `https://github.com/jeffsee55/movie-content`,
+    });
+
+    const dir = await fs.promises.readdir(tmpDir.name);
+    this.dir = tmpDir.name;
+    console.log("tempdir contents", dir);
+    // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
     const commitInfo = await this.getCommitForBranch({
       branch: args.branchName,
     });

@@ -9,7 +9,6 @@ const clone = async () => {
   for await (const table of Object.values(tables)) {
     await db.delete(table).run();
   }
-  console.log("cloning...");
   await Repo.clone({
     orgName: "jeffsee55",
     repoName: "movie-content",
