@@ -1,6 +1,5 @@
 import type { MetaFunction } from "@remix-run/node";
 import { clsx } from "clsx";
-import SQLiteDatabase from "better-sqlite3";
 import {
   BoltIcon,
   ChevronRightIcon,
@@ -8,9 +7,10 @@ import {
   HomeIcon,
   SearchIcon,
 } from "lucide-react";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { schema, tables } from "~/services/git/schema";
+import { tables } from "~/services/git/schema";
 import { Repo } from "~/services/git/git";
+import { Link, useLoaderData } from "@remix-run/react";
+import { loadDatabase } from "~/services/git/database";
 
 export const meta: MetaFunction = () => {
   return [
@@ -20,12 +20,10 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader() {
-  const TEST_SQLITE = "test.sqlite";
   const movieRepoPath = "/Users/jeffsee/code/movie-content";
-  const sqlite = new SQLiteDatabase(TEST_SQLITE);
-  const db = drizzle(sqlite, { schema: schema });
+  const { db } = loadDatabase();
   for await (const table of Object.values(tables)) {
-    db.delete(table).run();
+    await db.delete(table).run();
   }
   const repo = await Repo.clone({
     orgName: "jeffsee55",
@@ -42,6 +40,7 @@ export async function loader() {
 }
 
 export default function Index() {
+  const data = useLoaderData<typeof loader>();
   return (
     <div className="h-screen w-screen bg-zinc-900 text-white flex flex-col">
       <div className="h-16 w-full border-b border-zinc-800 flex justify-between items-center">
@@ -74,9 +73,10 @@ export default function Index() {
           <div>
             <ul className="flex flex-col gap-y-2">
               <li>
-                <a
-                  href={"#"}
+                <Link
+                  to={"#"}
                   className={clsx(
+                    // eslint-disable-next-line no-constant-condition
                     false
                       ? "bg-zinc-900 text-white"
                       : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
@@ -85,12 +85,13 @@ export default function Index() {
                 >
                   <HomeIcon className="h-5 w-5" strokeWidth={1.25} />
                   <span className="sr-only">Home</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href={"#"}
+                <Link
+                  to={"#"}
                   className={clsx(
+                    // eslint-disable-next-line no-constant-condition
                     false
                       ? "bg-zinc-900 text-white"
                       : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
@@ -99,12 +100,13 @@ export default function Index() {
                 >
                   <GitBranchIcon className="h-5 w-5" strokeWidth={1.25} />
                   <span className="sr-only">Changes</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href={"#"}
+                <Link
+                  to={"#"}
                   className={clsx(
+                    // eslint-disable-next-line no-constant-condition
                     false
                       ? "bg-zinc-900 text-white"
                       : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
@@ -113,7 +115,7 @@ export default function Index() {
                 >
                   <BoltIcon className="h-5 w-5" strokeWidth={1.25} />
                   <span className="sr-only">Settings</span>
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -134,16 +136,18 @@ export default function Index() {
                     </span>
                   </div>
                   <div className="text-sm">
-                    <a href="" className="font-display font-semibold">
+                    <Link to="#" className="font-display font-semibold">
                       View All{" "}
                       <span className="pl-2" aria-hidden="true">
                         →
                       </span>
-                    </a>
+                    </Link>
                   </div>
                 </div>
                 <div className="flex gap-4">
-                  <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col"></div>
+                  <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col overflow-hidden">
+                    {JSON.stringify(data)}
+                  </div>
                   <div className="w-64 h-96 rounded-lg bg-[#453d4c]"></div>
                 </div>
               </div>
@@ -156,16 +160,16 @@ export default function Index() {
   );
 }
 
-const statuses = {
+const statuses: Record<string, string> = {
   offline: "text-gray-500 bg-gray-100/10",
   online: "text-green-400 bg-green-400/10",
   error: "text-rose-400 bg-rose-400/10",
 };
-const environments = {
+const environments: Record<string, string> = {
   Preview: "text-gray-400 bg-gray-400/10 ring-gray-400/20",
   Production: "text-indigo-400 bg-indigo-400/10 ring-indigo-400/30",
 };
-const deployments = [
+const deployments: Record<string, string | number>[] = [
   {
     id: 1,
     href: "#",
@@ -213,7 +217,7 @@ const Deployments = () => {
                   <div className="h-2 w-2 rounded-full bg-current" />
                 </div>
                 <h2 className="min-w-0 text-sm font-semibold leading-6 text-white">
-                  <a href={deployment.href} className="flex gap-x-2">
+                  <a href={String(deployment.href)} className="flex gap-x-2">
                     <span className="truncate">{deployment.teamName}</span>
                     <span className="text-gray-400">/</span>
                     <span className="whitespace-nowrap">

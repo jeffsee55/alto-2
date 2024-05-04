@@ -9,3 +9,4 @@ drizzle.dev
 drizzle.test
 dev.sqlite
 test.sqlite
+turso.db

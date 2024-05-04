@@ -1,28 +1,28 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not } from "drizzle-orm";
 import * as git from "isomorphic-git";
-import {} from "isomorphic-git";
 import fs from "fs";
 import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
 
-type DB = BetterSQLite3Database<typeof schema>;
+type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
 export class GitExec {
   cache: Record<string, unknown> = {};
   orgName: string;
   repoName: string;
   dir: string;
-  db: BetterSQLite3Database<typeof schema>;
+  db: DB;
 
   constructor(args: {
     orgName: string;
     repoName: string;
     localPath: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
@@ -319,13 +319,13 @@ export class Repo {
   orgName: string;
   repoName: string;
   localPath: string;
-  db: BetterSQLite3Database<typeof schema>;
+  db: DB;
 
   constructor(args: {
     orgName: string;
     repoName: string;
     localPath: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
@@ -342,7 +342,7 @@ export class Repo {
      * into a temporary directory
      */
     localPath: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
     branchName: string;
   }) {
     const repo = new Repo(args);
@@ -439,7 +439,7 @@ export class Repo {
 export class Branch {
   orgName: string;
   repoName: string;
-  db: BetterSQLite3Database<typeof schema>;
+  db: DB;
   branchName: string;
   commitOid: string;
   localPath: string;
@@ -447,7 +447,7 @@ export class Branch {
   constructor(args: {
     orgName: string;
     repoName: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
     branchName: string;
     commit: string;
     localPath: string;
@@ -463,7 +463,7 @@ export class Branch {
   static fromRecord(value: {
     name: string;
     orgName: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
     localPath: string;
     commit: string;
     repoName: string;
@@ -729,7 +729,7 @@ export class Branch {
 export class Commit {
   orgName: string;
   repoName: string;
-  db: BetterSQLite3Database<typeof schema>;
+  db: DB;
 
   content: string;
   tree: TreeType;
@@ -738,7 +738,7 @@ export class Commit {
   constructor(args: {
     orgName: string;
     repoName: string;
-    db: BetterSQLite3Database<typeof schema>;
+    db: DB;
     message: string;
     localPath: string;
     tree: TreeType;

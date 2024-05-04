@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import SQLiteDatabase from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { schema, tables } from "~/services/git/schema";
+import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
 import { Repo } from "./git";
+import { loadDatabase } from "./database";
 
 tmp.setGracefulCleanup();
 
@@ -42,13 +40,9 @@ export const setup = async (
   //   recursive: true,
   // });
   const pathToGitRepo = args.repoPath!;
-  const sqlite = new SQLiteDatabase(args.sqliteUrl);
-  const db = drizzle(sqlite, { schema: schema });
-  if (args.sqliteUrl === ":memory:") {
-    await migrate(db, { migrationsFolder: "./drizzle.test" });
-  }
+  const { db } = loadDatabase();
   for await (const table of Object.values(tables)) {
-    db.delete(table).run();
+    await db.delete(table).run();
   }
 
   return {
@@ -79,7 +73,6 @@ describe("clone", async () => {
     await expect(JSON.stringify(result, null, 2)).toMatchFileSnapshot(
       "queries/1.json"
     );
-    console.log(result.items.length);
 
     await branch.upsert({
       path: "content/movies/movie2.json",

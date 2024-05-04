@@ -9,10 +9,7 @@ installGlobals();
 export default defineConfig({
   plugins: [remix(), tsconfigPaths()],
   test: {
-    include: [
-      "**/*.{test,spec}.?(c|m)[jt]s?(x)",
-      // WIP get isomorphic-git working
-      // "app/services/isomorphic-git/__tests__/test-*.js",
-    ],
+    include: ["**/*.{test,spec}.?(c|m)[jt]s?(x)"],
+    setupFiles: ["dotenv/config"], // load .env file
   },
 });
