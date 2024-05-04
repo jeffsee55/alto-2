@@ -4,8 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "npx tsx ./clone.ts && remix vite:build",
-    "dev": "npx tsx ./clone.ts && remix vite:dev",
+    "build": "pnpm tsx ./clone.ts && remix vite:build",
+    "dev": "pnpm tsx ./clone.ts && remix vite:dev",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "start": "remix-serve ./build/server/index.js",
     "db:memory:generate": "rm -rf drizzle.memory && pnpm drizzle-kit generate:sqlite --schema=./app/services/database/schema.ts --out=drizzle.memory",
@@ -16,7 +16,8 @@
     "db:turso:generate": "pnpm drizzle-kit generate:sqlite --config drizzle.turso.config.ts",
     "db:turso:reset": "rm turso.sqlite && pnpm db:turso:push",
     "db:turso:studio": "pnpm drizzle-kit studio --config drizzle.turso.config.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "tsx": "tsx"
   },
   "dependencies": {
     "@libsql/client": "^0.6.0",
@@ -60,6 +61,7 @@
     "eslint-import-resolver-typescript": "^3.6.1",
     "eslint-plugin-import": "^2.28.1",
     "eslint-plugin-jsx-a11y": "^6.7.1",
+    "tsx": "4.9.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "postcss": "^8.4.38",
@@ -69,5 +71,8 @@
     "vite": "^5.1.0",
     "vite-tsconfig-paths": "^4.2.1",
     "vitest": "^1.5.0"
+  },
+  "engines": {
+    "node": "20"
   }
 }
