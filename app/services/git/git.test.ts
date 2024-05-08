@@ -10,21 +10,6 @@ const TEST_SQLITE = "test.sqlite";
 const largeRepoPath = "/Users/jeffsee/code/smashing-magazine";
 largeRepoPath;
 
-/**
- *
- * This strategy uses a combination of where the source of truth is
- * for the tree / commit / ref relationships are housed.
- *
- * The commit stores a "tree" object which contains the mappings
- * of paths to the actual objects. This is the canonical source
- * of truth for when we need to build a git commit
- *
- * There's also a join table between a ref and objects. The join
- * table also has the "path". So it effectively is doing the job
- * that potentially many commit/tree objects would do
- *
- */
-
 export const setup = async (
   args: {
     // When using a real db, ensure the schema is scaffolded via push:sqlite
@@ -51,6 +36,52 @@ export const setup = async (
 };
 
 describe("clone", async () => {
+  it.skip("cloning twice doesn't error", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+  });
+  it("cloning another branch only results in a delta update", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+    // expect no blobs_to_branches to have a path for "content/actors/actor6.md"
+
+    await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "feat-1",
+    });
+    // expect blobs_to_branches to have a path for "content/actors/actor6.md"
+    // expect to find it on feat-1
+    // expect content/actors/actor5.md not to have been called for upsert
+  });
   it("works", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,

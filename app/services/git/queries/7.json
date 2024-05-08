@@ -2,15 +2,8 @@
   "orgName": "jeffsee55",
   "repoName": "movie-content",
   "branchName": "feat-1",
-  "commitOid": "705221a1f7f37c17952bf2dfc58132372ac3a636",
+  "commitOid": "39c2be5e91aa43b65c347143274877d307f83b0c",
   "items": [
-    {
-      "path": "README.md",
-      "blob": {
-        "oid": "467b8723c91b056e37f91e47f5a4ff1685f75088",
-        "content": "# Testing again again.\n"
-      }
-    },
     {
       "path": "content/actors/actor1.md",
       "blob": {
@@ -44,6 +37,13 @@
       "blob": {
         "oid": "e56a2a6337850e669d2397e6fa27dbd2989b7b9e",
         "content": "---\nname: Mike Underwood\nagency: agency1\n---\n\nHello, world!\n\nOther info here\n"
+      }
+    },
+    {
+      "path": "content/actors/actor6.md",
+      "blob": {
+        "oid": "e3e2882640c51de8c8c8777b91fe68aba319589c",
+        "content": "---\nname: Another Actor 6\nagency: agency2\n---\n\nHello, world!\n\nA lovely language know as :abbr[HTML]{title=\"HyperText Markup Language\" quote=\"content/movies/movie1.json\"}.\n\nOther info here\n"
       }
     },
     {
@@ -182,15 +182,8 @@
     {
       "path": "content/directors/director3.json",
       "blob": {
-        "oid": "97cb2634e32349f3f43eb92ff38115cbeba84f4a",
-        "content": "{\n  \"name\": \"Jade Rubrickk\",\n  \"avatar\": \"content/assets/asset3.json\",\n  \"agency\": \"agency6\"\n}\n"
-      }
-    },
-    {
-      "path": "content/directors/director4.json",
-      "blob": {
-        "oid": "86ebf008adef91ef51b03eb4ee823468159c333d",
-        "content": "{\n  \"name\": \"Some Director\",\n  \"avatar\": \"content/assets/asset4.json\",\n  \"agency\": \"agency6\"\n}\n"
+        "oid": "abae58c6f974b2f154d4a303e3f5e53ffd0cbacb",
+        "content": "{\n  \"name\": \"Jade Rubrick\",\n  \"avatar\": \"content/assets/asset3.json\",\n  \"agency\": \"agency6\"\n}\n"
       }
     },
     {
@@ -210,8 +203,8 @@
     {
       "path": "content/movies/movie2.json",
       "blob": {
-        "oid": "c76675e287d36c6f9847de3b19a46c868e1e9402",
-        "content": "{\n  \"title\": \"Dreamland Feature!\",\n  \"description\": \"A movie about dreams\",\n  \"year\": 2023,\n  \"director\": \"content/directors/director1.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"images\": [\"content/assets/asset2.json\", \"content/assets/asset3.json\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew4.md\"]\n}\n"
+        "oid": "68ba6caaf14afcc396260bd50645df85f0831167",
+        "content": "{\n  \"title\": \"Dreamland!\",\n  \"description\": \"A movie about dreams\",\n  \"year\": 2023,\n  \"director\": \"content/directors/director1.json\",\n  \"actors\": [\"content/actors/actor1.md\"],\n  \"images\": [\"content/assets/asset2.json\", \"content/assets/asset3.json\"],\n  \"crew\": [\"content/crew/crew3.md\", \"content/crew/crew4.md\"]\n}\n"
       }
     },
     {
@@ -240,6 +233,13 @@
       "blob": {
         "oid": "638d427299bb3110013567e8649af5f121a69233",
         "content": "{\n  \"title\": \"The Adventure Begins\",\n  \"blocks\": [\"content/cta/cta1.json\", \"content/hero/hero1.json\"]\n}\n"
+      }
+    },
+    {
+      "path": "content/posts/post1.json",
+      "blob": {
+        "oid": "52175c5e75576093d72fed7c169fca61c541ea73",
+        "content": "{\n  \"title\": \"Hello, world!\",\n  \"author\": \"content/directors/director1.json\",\n  \"seo\": {\n    \"title\": \"Hello, from SEO\",\n    \"tags\": [\n      { \"name\": \"description\", \"value\": \"This is my site. Welcome!\" },\n      { \"name\": \"image\", \"value\": \"This is an image\" }\n    ]\n  }\n}\n"
       }
     },
     {

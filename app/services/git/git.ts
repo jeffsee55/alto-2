@@ -13,8 +13,8 @@ import tmp from "tmp-promise";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
-// export const movieRepoPath = "/Users/jeffsee/code/movie-content";
-export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";
+export const movieRepoPath = "/Users/jeffsee/code/movie-content";
+// export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";
 // export const movieRepoConfig = {
 //   orgName: "jeffsee55",
 //   repoName: "movie-content-private",
@@ -197,25 +197,25 @@ export class GitExec {
       throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
     }
   }
-  async buildCommitHash(args: { message: string; tree: TreeType }) {
+  buildCommitHash(args: { message: string; tree: TreeType }) {
     return GitExec.buildCommitHash({
       ...args,
       dir: this.dir,
     });
   }
 
-  static async buildCommitHash(args: {
+  static buildCommitHash(args: {
     message: string;
     tree: TreeType;
     dir: string;
   }) {
     const tree = args.tree;
-    const buildTree = async (tree: TreeType) => {
+    const buildTree = (tree: TreeType) => {
       const entries: { type: "tree" | "blob"; oid: string; name: string }[] =
         [];
-      for await (const [name, entry] of Object.entries(tree.entries)) {
+      for (const [name, entry] of Object.entries(tree.entries)) {
         if (entry.type === "tree") {
-          const oid = await buildTree(entry);
+          const oid = buildTree(entry);
           entries.push({ type: "tree", oid, name });
         } else {
           entries.push({ type: "blob", oid: entry.oid, name });
@@ -262,7 +262,7 @@ export class GitExec {
       // }
       return result2;
     };
-    const res = await buildTree(tree);
+    const res = buildTree(tree);
 
     return res;
   }
@@ -308,6 +308,7 @@ export class GitExec {
     const cloneResult = {
       branchName: args.branchName,
       commit: {
+        parents: commitInfo.commit.parent,
         content: commitInfo.commit.message,
         oid: commitInfo.oid,
       },
@@ -396,7 +397,7 @@ export class Repo {
     });
     const repo = new Repo({ ...args, gitExec });
     await repo.initialize();
-    return repo.checkout({ branchName: args.branchName });
+    return await repo.checkout({ branchName: args.branchName });
   }
 
   static async init(args: {
@@ -423,12 +424,12 @@ export class Repo {
   async checkout(args: { branchName: string }) {
     const gitExec = this.gitExec;
     const cloneResult = await gitExec.clone({ branchName: args.branchName });
-    const firstCommit = await this.createCommit(cloneResult);
-    const branch = await this.createBranch({
+
+    const firstCommit = await this.findOrCreateCommit(cloneResult);
+    await this.findOrCreateBranch({
       branchName: args.branchName,
-      commit: await firstCommit.oid(),
+      commit: await firstCommit.oid,
     });
-    await branch.createBlobs();
     return this;
   }
 
@@ -440,7 +441,7 @@ export class Repo {
   }
   async createBranch({
     branchName,
-    commit,
+    commit: commitOid,
   }: {
     branchName: string;
     commit: string;
@@ -450,10 +451,11 @@ export class Repo {
       repoName: this.repoName,
       orgName: this.orgName,
       branchName,
-      commit: commit,
+      commit: commitOid,
       gitExec: this.gitExec,
     });
     await branch.save();
+    await branch.createBlobs();
     return branch;
   }
 
@@ -474,16 +476,54 @@ export class Repo {
     return Branch.fromRecord({
       ...branchRecord,
       db: this.db,
-      name: args.branchName,
+      branchName: args.branchName,
       repoName: this.repoName,
       orgName: this.orgName,
       gitExec: this.gitExec,
     });
   }
 
+  async findOrCreateBranch(args: { branchName: string; commit: string }) {
+    const orgName = this.orgName;
+    const repoName = this.repoName;
+    const existingBranch = await this.db.query.branches.findFirst({
+      where(fields, ops) {
+        return ops.and(
+          ops.eq(fields.orgName, orgName),
+          ops.eq(fields.repoName, repoName),
+          ops.eq(fields.branchName, args.branchName),
+          ops.eq(fields.commit, args.commit)
+        );
+      },
+    });
+    const branch = existingBranch
+      ? Branch.fromRecord({
+          ...existingBranch,
+          gitExec: this.gitExec,
+          db: this.db,
+          orgName: this.orgName,
+          repoName: this.repoName,
+        })
+      : await this.createBranch({
+          branchName: args.branchName,
+          commit: args.commit,
+        });
+    return branch;
+  }
+
+  async findOrCreateCommit(args: {
+    branchName: string;
+    commit: { parents: string[]; content: string; oid: string };
+  }) {
+    return await this.createCommit({
+      branchName: args.branchName,
+      commit: args.commit,
+    });
+  }
+
   async createCommit(args: {
     branchName: string;
-    commit: { content: string; oid: string };
+    commit: { parents: string[]; content: string; oid: string };
   }) {
     const commit = new Commit({
       db: this.db,
@@ -496,7 +536,10 @@ export class Repo {
       }),
       gitExec: this.gitExec,
     });
-    await commit.save();
+    const exists = false;
+    if (!exists) {
+      await commit.save();
+    }
     return commit;
   }
 }
@@ -528,7 +571,7 @@ export class Branch {
   }
 
   static fromRecord(value: {
-    name: string;
+    branchName: string;
     orgName: string;
     db: DB;
 
@@ -536,14 +579,19 @@ export class Branch {
     repoName: string;
     gitExec: GitExec;
   }) {
-    return new Branch({
-      branchName: value.name,
+    const branch = new Branch({
+      branchName: value.branchName,
       orgName: value.orgName,
       db: value.db,
       commit: value.commit,
       repoName: value.repoName,
       gitExec: value.gitExec,
     });
+    return branch;
+  }
+
+  async merge(branchToMerge: Branch) {
+    console.log("merge", this.branchName, branchToMerge.branchName);
   }
 
   whereClause(
@@ -646,7 +694,7 @@ export class Branch {
 
     await this.db
       .update(tables.branches)
-      .set({ commit: await commit.oid() })
+      .set({ commit: await commit.oid })
       .where(
         and(
           eq(tables.branches.orgName, this.orgName),
@@ -710,7 +758,7 @@ export class Branch {
 
     await this.db
       .update(tables.branches)
-      .set({ commit: await commit.oid() })
+      .set({ commit: await commit.oid })
       .where(
         and(
           eq(tables.branches.orgName, this.orgName),
@@ -718,7 +766,7 @@ export class Branch {
           eq(tables.branches.branchName, this.branchName)
         )
       );
-    this.commitOid = await commit.oid();
+    this.commitOid = await commit.oid;
 
     return { [args.path]: blobOid };
   }
@@ -798,12 +846,15 @@ export class Commit {
   tree: TreeType;
 
   gitExec: GitExec;
+  oid: string;
+  parents?: string[];
 
   constructor(args: {
     orgName: string;
     repoName: string;
     db: DB;
     message: string;
+    parents?: string[];
 
     tree: TreeType;
     gitExec: GitExec;
@@ -814,6 +865,12 @@ export class Commit {
     this.content = args.message;
     this.tree = args.tree;
     this.gitExec = args.gitExec;
+    const oid = args.gitExec.buildCommitHash({
+      message: this.content,
+      tree: this.tree,
+    });
+    this.parents = args.parents;
+    this.oid = oid;
   }
 
   static fromRecord(value: {
@@ -837,20 +894,26 @@ export class Commit {
     });
   }
 
-  async oid() {
-    const oid = await this.gitExec.buildCommitHash({
-      message: this.content,
-      tree: this.tree,
-    });
-    return oid;
-  }
-
   async save() {
-    const oid = await this.oid();
+    // Only dealing with single parent commits for now
+    // const parentOid = this.parents ? this.parents[0] : undefined;
+
+    const extra: Record<"parent", string> | Record<string, never> = {};
+    // if (parentOid) {
+    //   const parent = await this.db.query.commits.findFirst({
+    //     where: (fields, ops) => ops.eq(fields.oid, parentOid),
+    //   });
+    //   console.log(parentOid, parent);
+    //   // if (parent) {
+    //   //   extra["parent"] = parent.oid;
+    //   // }
+    // }
+
     await this.db.insert(tables.commits).values({
       content: this.content,
-      oid,
+      oid: this.oid,
       tree: JSON.stringify(this.tree),
+      ...extra,
     });
   }
 }

@@ -41,7 +41,15 @@ export const commits = sqliteTable("commits", {
   oid: text("oid").primaryKey().notNull(),
   content: text("content").notNull(),
   tree: text("tree").notNull(),
+  parent: text("parent"),
 });
+
+export const commitRelations = relations(commits, ({ one }) => ({
+  parent: one(commits, {
+    fields: [commits.parent],
+    references: [commits.oid],
+  }),
+}));
 
 export const blobs = sqliteTable("blobs", {
   oid: text("oid").primaryKey().notNull(),
@@ -128,6 +136,7 @@ export const tables = {
 export const schema = {
   ...tables,
   repoRelations,
+  commitRelations,
   branchRelations,
   blobsToBranchesRelations,
   blobRelations,
