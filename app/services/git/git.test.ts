@@ -145,6 +145,7 @@ describe("clone", async () => {
       "queries/6.json"
     );
 
+    // testing fast-forward merge
     const campaignBranch = await branch.checkoutNewBranch({
       newBranchName: "summer-campaign",
     });
@@ -170,12 +171,26 @@ describe("clone", async () => {
       "content/movies/comedies/movie5.json"
     );
 
-    // const branch2 = await branch.branchFrom({newBranchName: "some-campaign"})
     await repo.checkout({ branchName: "feat-1" });
     const branch2 = await repo.getBranch({ branchName: "feat-1" });
     const result7 = await branch2.list();
     await expect(JSON.stringify(result7, null, 2)).toMatchFileSnapshot(
       "queries/7.json"
     );
+
+    // testing proper merge
+
+    const otherBranch = await branch.checkoutNewBranch({
+      newBranchName: "other-branch",
+    });
+    await branch.upsert({
+      path: "content/movies/comedies/movie6.json",
+      content: "some-content-6",
+    });
+    await otherBranch.upsert({
+      path: "content/movies/comedies/movie7.json",
+      content: "some-content-7",
+    });
+    await branch.merge(otherBranch);
   });
 });

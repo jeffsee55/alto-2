@@ -683,11 +683,21 @@ WHERE ${table.branchName} = ${this.branchName};`;
     traverseParentFromCommit(commitsFromThatBranch[0], ancestorsFromThatBranch);
 
     let mergeBaseOid = "";
-    [this.commitOid, ancestorsFromThisBranch].forEach((oid) => {
+    for (const oid of [this.commitOid, ...ancestorsFromThisBranch]) {
       if (ancestorsFromThatBranch.includes(oid)) {
         mergeBaseOid = oid;
+        break;
       }
-    });
+    }
+    if (branchToMerge.branchName === "other-branch") {
+      // console.log(mergeBaseOid);
+      // console.log(ancestorsFromThisBranch);
+      // console.log(ancestorsFromThatBranch);
+      // console.dir(
+      //   { commitsFromThisBranch, commitsFromThatBranch },
+      //   { depth: null }
+      // );
+    }
     const mergeBase = await this.db.query.commits.findFirst({
       where: (fields, ops) => {
         return ops.eq(fields.oid, mergeBaseOid);
@@ -697,7 +707,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
         content: true,
       },
     });
-    if (mergeBase.oid === this.commitOid) {
+    if (mergeBase?.oid === this.commitOid) {
+      // this is a fast-forward merge
       const blobsToAdd: Record<string, { oid: string }> = {};
       this.commitOid = branchToMerge.commitOid;
       const ourTree = (await this.currentCommit()).tree;
@@ -739,6 +750,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
       }
 
       await this.save();
+    } else {
+      const ourTree = (await this.currentCommit()).tree;
+      const theirTree = (await branchToMerge.currentCommit()).tree;
+      // console.log({ ourTree, theirTree });
     }
 
     // if there's
