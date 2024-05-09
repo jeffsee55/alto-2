@@ -179,7 +179,6 @@ describe("clone", async () => {
     );
 
     // testing proper merge
-
     const otherBranch = await branch.checkoutNewBranch({
       newBranchName: "other-branch",
     });

@@ -745,7 +745,11 @@ WHERE ${table.branchName} = ${this.branchName};`;
       const baseTree = mergeBase;
       const ourCommit = await this.currentCommit();
       const theirCommit = await branchToMerge.currentCommit();
-      console.log({ baseTree, ourCommit, theirCommit });
+      console.log({
+        baseTree: baseTree.oid,
+        ourCommit: ourCommit.oid,
+        theirCommit: theirCommit.oid,
+      });
     }
 
     // if there's
