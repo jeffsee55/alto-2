@@ -82,7 +82,7 @@ describe("clone", async () => {
     // expect to find it on feat-1
     // expect content/actors/actor5.md not to have been called for upsert
   });
-  it("works", async () => {
+  it.only("works", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,
       repoPath: movieRepoPath,
@@ -140,11 +140,37 @@ describe("clone", async () => {
       content: "some-content-4",
     });
 
-    const result6 = await branch.list();
+    const result6 = await branch.list({ limit: 100 });
     await expect(JSON.stringify(result6, null, 2)).toMatchFileSnapshot(
       "queries/6.json"
     );
 
+    const campaignBranch = await branch.checkoutNewBranch({
+      newBranchName: "summer-campaign",
+    });
+    const result6aa = await campaignBranch.list({ limit: 100 });
+    expect(result6.items).toEqual(result6aa.items);
+
+    await campaignBranch.upsert({
+      path: "content/movies/comedies/movie5.json",
+      content: "some-content-5",
+    });
+    const result6b = await branch.list();
+    expect(result6b.items.map((item) => item.path)).not.toContain(
+      "content/movies/comedies/movie5.json"
+    );
+    const result6c = await campaignBranch.list();
+    expect(result6c.items.map((item) => item.path)).toContain(
+      "content/movies/comedies/movie5.json"
+    );
+    await branch.merge(campaignBranch);
+    expect(branch.commitOid).toEqual(campaignBranch.commitOid);
+    const result6d = await branch.list();
+    expect(result6d.items.map((item) => item.path)).toContain(
+      "content/movies/comedies/movie5.json"
+    );
+
+    // const branch2 = await branch.branchFrom({newBranchName: "some-campaign"})
     await repo.checkout({ branchName: "feat-1" });
     const branch2 = await repo.getBranch({ branchName: "feat-1" });
     const result7 = await branch2.list();

@@ -23,7 +23,7 @@ export const branches = sqliteTable(
     orgName: text("org_name").notNull(),
     repoName: text("repo_name").notNull(),
     branchName: text("branch_name").notNull(),
-    commit: text("commit")
+    commitOid: text("commit_oid")
       .notNull()
       .references(() => commits.oid),
   },
@@ -108,8 +108,8 @@ const blobsToBranchesRelations = relations(blobsToBranches, ({ one }) => {
 
 const branchRelations = relations(branches, ({ many, one }) => {
   return {
-    commit: one(commits, {
-      fields: [branches.commit],
+    commitOid: one(commits, {
+      fields: [branches.commitOid],
       references: [commits.oid],
     }),
     repo: one(repos, {
