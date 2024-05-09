@@ -689,15 +689,6 @@ WHERE ${table.branchName} = ${this.branchName};`;
         break;
       }
     }
-    if (branchToMerge.branchName === "other-branch") {
-      // console.log(mergeBaseOid);
-      // console.log(ancestorsFromThisBranch);
-      // console.log(ancestorsFromThatBranch);
-      // console.dir(
-      //   { commitsFromThisBranch, commitsFromThatBranch },
-      //   { depth: null }
-      // );
-    }
     const mergeBase = await this.db.query.commits.findFirst({
       where: (fields, ops) => {
         return ops.eq(fields.oid, mergeBaseOid);
@@ -751,9 +742,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
 
       await this.save();
     } else {
-      const ourTree = (await this.currentCommit()).tree;
-      const theirTree = (await branchToMerge.currentCommit()).tree;
-      // console.log({ ourTree, theirTree });
+      const baseTree = mergeBase;
+      const ourCommit = await this.currentCommit();
+      const theirCommit = await branchToMerge.currentCommit();
+      console.log({ baseTree, ourCommit, theirCommit });
     }
 
     // if there's
