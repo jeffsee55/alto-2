@@ -82,7 +82,7 @@ describe("clone", async () => {
     // expect to find it on feat-1
     // expect content/actors/actor5.md not to have been called for upsert
   });
-  it.only("works", async () => {
+  it("works", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,
       repoPath: movieRepoPath,
@@ -202,5 +202,52 @@ describe("clone", async () => {
     expect(result8.items.map((item) => item.path)).toContain(
       "content/movies/comedies/movie7.json"
     );
+  });
+  it("works2", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    const result = await branch.find({ path: "content/movies/movie2.json" });
+    const result2 = await featureBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(result?.item).toEqual(result2?.item);
+    expect(branch.commitOid).toEqual(featureBranch.commitOid);
+
+    // await branch.upsert({
+    //   path: "content/movies/movie10.json",
+    //   content: "some-content-movie-10",
+    // });
+    // const result3 = await branch.find({ path: "content/movies/movie10.json" });
+    // expect(result3?.item?.blob.content).toEqual("some-content-movie-10");
+    // const result4 = await featureBranch.find({
+    //   path: "content/movies/movie10.json",
+    // });
+    // expect(result4).toBeNull();
+
+    await featureBranch.delete({ path: "content/movies/movie2.json" });
+    const result3 = await branch.find({ path: "content/movies/movie2.json" });
+    expect(result3).not.toBeNull();
+    const result4 = await featureBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(result4).toBeNull();
+    await branch.merge(featureBranch);
+    const result5 = await branch.find({ path: "content/movies/movie2.json" });
+    expect(result5).toBeNull();
   });
 });

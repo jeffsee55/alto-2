@@ -207,18 +207,25 @@ export class GitExec {
       throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
     }
   }
-  buildCommitHash(args: { message: string; tree: TreeType }) {
-    return GitExec.buildCommitHash({
+  buildTreeHash(args: { tree: TreeType }) {
+    return GitExec.buildTreeHash({
       ...args,
       dir: this.dir,
     });
   }
+  buildCommitHash(args: { message: string; treeOid: string }) {
+    const string = `tree ${args.treeOid}\n\n${args.message}`;
+    const buffer = Buffer.from(string, "utf8");
+    const wrapped = Buffer.concat([
+      Buffer.from("commit "),
+      Buffer.from(buffer.length.toString()),
+      Buffer.from([0]),
+      buffer,
+    ]);
+    return crypto.createHash("sha1").update(wrapped).digest("hex");
+  }
 
-  static buildCommitHash(args: {
-    message: string;
-    tree: TreeType;
-    dir: string;
-  }) {
+  static buildTreeHash(args: { tree: TreeType; dir: string }) {
     const tree = args.tree;
     const buildTree = (tree: TreeType) => {
       const entries: { type: "tree" | "blob"; oid: string; name: string }[] =
@@ -700,6 +707,11 @@ WHERE ${table.branchName} = ${this.branchName};`;
         tree: true,
       },
     });
+    if (!mergeBase) {
+      throw new Error(
+        `Unable to find merge base for ${this.commitOid} and ${branchToMerge.commitOid}`
+      );
+    }
     if (mergeBase?.oid === this.commitOid) {
       // this is a fast-forward merge
       const blobsToAdd: Record<string, { oid: string }> = {};
@@ -724,6 +736,11 @@ WHERE ${table.branchName} = ${this.branchName};`;
               } else {
                 if (i === path.split(sep).length - 1) {
                   blobsToAdd[path] = entry;
+                  GitExec.updateTree({
+                    tree: ourTree,
+                    path,
+                    blobOid: entry.oid,
+                  });
                 }
               }
             });
@@ -731,6 +748,35 @@ WHERE ${table.branchName} = ${this.branchName};`;
         }
       };
       await walkTree(theirTree);
+
+      // console.dir(ourTree.entries.content, { depth: null });
+      const blobsToRemove: Record<string, { oid: string }> = {};
+      const walkTree2 = async (tree: TreeType, parentPath?: string) => {
+        for await (const [name, entry] of Object.entries(tree.entries)) {
+          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
+          if (entry.type === "tree") {
+            await walkTree2(entry, path);
+          } else {
+            let theirCurrentValue = theirTree;
+            path.split(sep).forEach((part, i) => {
+              if (theirCurrentValue.entries[part]) {
+                theirCurrentValue = theirCurrentValue.entries[part];
+                if (i === path.split(sep).length - 1) {
+                  if (theirCurrentValue.oid !== entry.oid) {
+                    console.log("conflict", theirCurrentValue.oid, path);
+                  }
+                }
+              } else {
+                if (i === path.split(sep).length - 1) {
+                  blobsToRemove[path] = entry;
+                  GitExec.removeFromTree({ tree: ourTree, path });
+                }
+              }
+            });
+          }
+        }
+      };
+      await walkTree2(ourTree);
       for await (const [path, entry] of Object.entries(blobsToAdd)) {
         await this.db.insert(tables.blobsToBranches).values({
           blobOid: entry.oid,
@@ -741,6 +787,29 @@ WHERE ${table.branchName} = ${this.branchName};`;
           branchName: this.branchName,
         });
       }
+      for await (const [path, entry] of Object.entries(blobsToRemove)) {
+        await this.db
+          .delete(tables.blobsToBranches)
+          .where(
+            and(
+              eq(tables.blobsToBranches.orgName, this.orgName),
+              eq(tables.blobsToBranches.repoName, this.repoName),
+              eq(tables.blobsToBranches.branchName, this.branchName),
+              eq(tables.blobsToBranches.path, path)
+            )
+          );
+      }
+      const commit = new Commit({
+        orgName: this.orgName,
+        repoName: this.repoName,
+        db: this.db,
+        message: `Merged ${mergeBase.oid} and ${commitsFromThatBranch[0].oid}`,
+        tree: ourTree,
+        gitExec: this.gitExec,
+        parents: [mergeBase.oid, commitsFromThatBranch[0].oid],
+      });
+
+      await commit.save();
 
       await this.save();
     } else {
@@ -748,7 +817,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
       const ourCommit = await this.currentCommit();
       const theirCommit = await branchToMerge.currentCommit();
       console.log({
-        baseCommit: baseCommit.oid,
+        baseCommit: baseCommit?.oid,
         ourCommit: ourCommit.oid,
         theirCommit: theirCommit.oid,
       });
@@ -863,8 +932,6 @@ WHERE ${table.branchName} = ${this.branchName};`;
       this.commitOid = commit.oid;
       await this.save();
     }
-
-    // if there's
   }
 
   whereClause(
@@ -930,6 +997,9 @@ WHERE ${table.branchName} = ${this.branchName};`;
         blob: true,
       },
     });
+    if (!item) {
+      return null;
+    }
     return {
       orgName: this.orgName,
       repoName: this.repoName,
@@ -976,6 +1046,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
           eq(tables.branches.branchName, this.branchName)
         )
       );
+    this.commitOid = commit.oid;
+    await this.save();
   }
 
   async upsert(args: { path: string; content: string }) {
@@ -1153,11 +1225,14 @@ export class Commit {
     this.content = args.message;
     this.tree = args.tree;
     this.gitExec = args.gitExec;
-    const oid = args.gitExec.buildCommitHash({
-      message: this.content,
+    const treeOid = args.gitExec.buildTreeHash({
       tree: this.tree,
     });
     this.parents = args.parents;
+    const oid = args.gitExec.buildCommitHash({
+      message: this.content,
+      treeOid,
+    });
     this.oid = oid;
   }
 
@@ -1203,6 +1278,7 @@ export class Commit {
       tree: JSON.stringify(this.tree),
       ...extra,
     });
+    // .onConflictDoNothing();
   }
 }
 
