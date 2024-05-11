@@ -191,5 +191,16 @@ describe("clone", async () => {
       content: "some-content-7",
     });
     await branch.merge(otherBranch);
+
+    const result8 = await branch.list({ limit: 100 });
+    await expect(JSON.stringify(result8, null, 2)).toMatchFileSnapshot(
+      "queries/8.json"
+    );
+    expect(result8.items.map((item) => item.path)).toContain(
+      "content/movies/comedies/movie6.json"
+    );
+    expect(result8.items.map((item) => item.path)).toContain(
+      "content/movies/comedies/movie7.json"
+    );
   });
 });

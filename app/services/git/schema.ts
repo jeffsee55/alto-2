@@ -70,6 +70,15 @@ export const blobsToBranches = sqliteTable(
   },
   (table) => {
     return {
+      // pk: primaryKey({
+      //   columns: [
+      //     table.orgName,
+      //     table.repoName,
+      //     table.branchName,
+      //     table.blobOid,
+      //     table.branchName,
+      //   ],
+      // }),
       branch: foreignKey({
         columns: [table.orgName, table.repoName, table.branchName],
         foreignColumns: [

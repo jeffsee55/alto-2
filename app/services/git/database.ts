@@ -14,6 +14,6 @@ export const loadDatabase = () => {
           "DRIVER environment variable must be set to either 'sqlite' or 'turso'"
         );
       }
-      return sqliteSetup();
+      return libsqlSetup();
   }
 };

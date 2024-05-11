@@ -4,7 +4,7 @@ import SQLiteDatabase from "better-sqlite3";
 import { schema } from "~/services/git/schema";
 
 const credentials = {
-  url: "test.sqlite",
+  url: "file:./test.sqlite",
 };
 
 export const dbSetup = () => {
@@ -18,5 +18,7 @@ export const drizzleConfig = {
   schema: "./app/services/git/schema.ts",
   out: "./drizzle.test",
   dbCredentials: credentials,
-  driver: "better-sqlite",
+  // driver: "better-sqlite",
+  // driver: ''
+  dialect: "sqlite",
 } satisfies Config;

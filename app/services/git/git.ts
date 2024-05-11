@@ -10,6 +10,7 @@ import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
 import tmp from "tmp-promise";
+import { Git } from "node-git-server";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
@@ -696,6 +697,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
       columns: {
         oid: true,
         content: true,
+        tree: true,
       },
     });
     if (mergeBase?.oid === this.commitOid) {
@@ -742,14 +744,124 @@ WHERE ${table.branchName} = ${this.branchName};`;
 
       await this.save();
     } else {
-      const baseTree = mergeBase;
+      const baseCommit = mergeBase;
       const ourCommit = await this.currentCommit();
       const theirCommit = await branchToMerge.currentCommit();
       console.log({
-        baseTree: baseTree.oid,
+        baseCommit: baseCommit.oid,
         ourCommit: ourCommit.oid,
         theirCommit: theirCommit.oid,
       });
+      const walkTree = async (
+        a: TreeType,
+        parentPath?: string,
+        callback: (something: any) => void
+      ) => {
+        for await (const [name, entry] of Object.entries(a.entries)) {
+          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
+          if (entry.type === "tree") {
+            await walkTree(entry, path, callback);
+          } else {
+            callback({ path, oid: entry.oid });
+          }
+        }
+      };
+      const findPathInTree = ({
+        path,
+        tree,
+      }: {
+        path: string;
+        tree: TreeType;
+      }): { type: "missing" } | { type: "found"; oid: string } => {
+        const pathParts = path.split(sep);
+        let current = tree;
+        let result = { type: "found", oid: "" };
+        pathParts.forEach((part, i) => {
+          if (!current.entries) {
+            throw new Error(`Expected current to have entries at path ${path}`);
+          }
+          if (pathParts.length - 1 === i) {
+            if (!current.entries[part]) {
+              result = { type: "missing" };
+            } else {
+              result = { type: "found", oid: current.entries[part].oid };
+            }
+          } else {
+            current = current.entries[part];
+          }
+        });
+        return result;
+      };
+      const itemsFromOursToAdd: { path: string; oid: string }[] = [];
+      await walkTree(ourCommit.tree, "", ({ path, oid }) => {
+        const toCompare = findPathInTree({
+          path,
+          tree: JSON.parse(baseCommit.tree),
+        });
+        if (toCompare.type === "missing") {
+          itemsFromOursToAdd.push({ path, oid: oid });
+        }
+      });
+      const itemsFromTheirsToAdd: { path: string; oid: string }[] = [];
+      await walkTree(theirCommit.tree, "", ({ path, oid }) => {
+        const toCompare = findPathInTree({
+          path,
+          tree: JSON.parse(baseCommit.tree),
+        });
+        if (toCompare.type === "missing") {
+          itemsFromTheirsToAdd.push({ path, oid: oid });
+        }
+      });
+      // console.log("itemsFromOursToAdd", itemsFromOursToAdd);
+      // console.log("itemsFromTheirsToAdd", itemsFromTheirsToAdd);
+      const tree = JSON.parse(baseCommit.tree);
+
+      itemsFromOursToAdd.forEach((item) => {
+        GitExec.updateTree({ tree: tree, path: item.path, blobOid: item.oid });
+      });
+      itemsFromTheirsToAdd.forEach((item) => {
+        GitExec.updateTree({ tree: tree, path: item.path, blobOid: item.oid });
+      });
+      const commit = new Commit({
+        orgName: this.orgName,
+        repoName: this.repoName,
+        db: this.db,
+        message: `Merged ${ourCommit.oid} and ${theirCommit.oid}`,
+        tree: tree,
+        gitExec: this.gitExec,
+        parents: [ourCommit.oid, theirCommit.oid],
+      });
+
+      await commit.save();
+      // this results in duplicates because there isnt a unique constraint on blobs_to_branches
+      // for await (const { path, oid } of itemsFromOursToAdd) {
+      //   await this.db
+      //     .insert(tables.blobsToBranches)
+      //     .values({
+      //       blobOid: oid,
+      //       path: path,
+      //       directory: createSortableDirectoryPath(path),
+      //       orgName: this.orgName,
+      //       repoName: this.repoName,
+      //       branchName: this.branchName,
+      //     })
+      //     .onConflictDoNothing();
+      // }
+      for await (const { path, oid } of itemsFromTheirsToAdd) {
+        await this.db
+          .insert(tables.blobsToBranches)
+          .values({
+            blobOid: oid,
+            path: path,
+            directory: createSortableDirectoryPath(path),
+            orgName: this.orgName,
+            repoName: this.repoName,
+            branchName: this.branchName,
+          })
+          .onConflictDoNothing();
+      }
+      this.commitOid = commit.oid;
+      await this.save();
     }
 
     // if there's

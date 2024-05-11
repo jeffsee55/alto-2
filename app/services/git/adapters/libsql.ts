@@ -4,9 +4,9 @@ import { createClient } from "@libsql/client";
 import { schema } from "~/services/git/schema";
 
 const credentials = {
-  // url: "file:./turso.db",
-  url: process.env.TURSO_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
+  url: "file:./turso.db",
+  // url: process.env.TURSO_URL!,
+  // authToken: process.env.TURSO_AUTH_TOKEN!,
 };
 
 export const dbSetup = () => {
@@ -21,4 +21,5 @@ export const drizzleConfig = {
   out: "./drizzle.turso",
   dbCredentials: credentials,
   driver: "turso",
+  dialect: "sqlite",
 } satisfies Config;
