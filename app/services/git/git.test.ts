@@ -203,7 +203,113 @@ describe("clone", async () => {
       "content/movies/comedies/movie7.json"
     );
   });
-  it("works2", async () => {
+  it("performs a fast-forward merge when an item was added", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result).toBeNull();
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    expect(branch.commitOid).toEqual(featureBranch.commitOid);
+
+    await featureBranch.upsert({
+      path: "content/movies/movie10.json",
+      content: "some-content",
+    });
+    const result3 = await featureBranch.find({
+      path: "content/movies/movie10.json",
+    });
+    expect(result3).not.toBeNull();
+    const result4 = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result4).toBeNull();
+
+    await branch.merge(featureBranch);
+    const result5 = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result5?.item).toEqual(result3?.item);
+  });
+  it("performs a fast-forward merge when an item was modified", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie2.json" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-3",
+    });
+    await featureBranch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-content",
+    });
+    const result2 = await featureBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(result?.item).not.toEqual(result2?.item);
+    await branch.merge(featureBranch);
+    const result3 = await branch.find({ path: "content/movies/movie2.json" });
+
+    expect(result3?.item).toEqual(result2?.item);
+  });
+  it("performs a fast-forward-ish merge when an item was modified and the target branch has been modified for another file", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie2.json" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-3",
+    });
+    await featureBranch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-content",
+    });
+    const result2 = await featureBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(result?.item).not.toEqual(result2?.item);
+    // make some other change on the main branch so it's not a fast-forward merge
+    await branch.upsert({
+      path: "content/movies/movie1.json",
+      content: "some-content-1",
+    });
+    await branch.merge(featureBranch);
+    const result3 = await branch.find({ path: "content/movies/movie2.json" });
+
+    expect(result3?.item).toEqual(result2?.item);
+  });
+  it("performs a fast-forward merge when an item was deleted", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,
       repoPath: movieRepoPath,
@@ -227,17 +333,6 @@ describe("clone", async () => {
     });
     expect(result?.item).toEqual(result2?.item);
     expect(branch.commitOid).toEqual(featureBranch.commitOid);
-
-    // await branch.upsert({
-    //   path: "content/movies/movie10.json",
-    //   content: "some-content-movie-10",
-    // });
-    // const result3 = await branch.find({ path: "content/movies/movie10.json" });
-    // expect(result3?.item?.blob.content).toEqual("some-content-movie-10");
-    // const result4 = await featureBranch.find({
-    //   path: "content/movies/movie10.json",
-    // });
-    // expect(result4).toBeNull();
 
     await featureBranch.delete({ path: "content/movies/movie2.json" });
     const result3 = await branch.find({ path: "content/movies/movie2.json" });

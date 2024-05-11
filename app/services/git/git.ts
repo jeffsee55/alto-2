@@ -10,7 +10,6 @@ import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
 import tmp from "tmp-promise";
-import { Git } from "node-git-server";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
@@ -70,6 +69,26 @@ export class GitExec {
       repoName: this.repoName,
       branchName: args.branchName,
     });
+  }
+  static readFromTree(args: {
+    tree: TreeType;
+    path: string;
+  }): TreeType | BlobType | undefined {
+    const pathParts = args.path.split(sep);
+    let result: TreeType | BlobType | undefined = undefined;
+    let currentEntry = args.tree;
+    pathParts.forEach((part) => {
+      const entry = currentEntry.entries[part];
+      if (!entry) {
+        result = undefined;
+      }
+      if (entry.type === "blob") {
+        result = entry;
+      } else {
+        currentEntry = entry;
+      }
+    });
+    return result;
   }
 
   static updateTree(args: { tree: TreeType; path: string; blobOid: string }) {
@@ -676,7 +695,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
       },
     });
     const ancestorsFromThisBranch: string[] = [];
-    type CommitRecord = { oid: string; parent?: CommitRecord };
+    type CommitRecord = {
+      oid: string;
+      parent?: CommitRecord | null | undefined;
+    };
     const traverseParentFromCommit = (
       commitRecord: CommitRecord,
       accumulator: string[]
@@ -715,6 +737,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
     if (mergeBase?.oid === this.commitOid) {
       // this is a fast-forward merge
       const blobsToAdd: Record<string, { oid: string }> = {};
+      const blobsToMerge: Record<
+        string,
+        { oursIsSameAsBase: boolean; ourOid: string; theirOid: string }
+      > = {};
       this.commitOid = branchToMerge.commitOid;
       const ourTree = (await this.currentCommit()).tree;
       const theirTree = (await branchToMerge.currentCommit()).tree;
@@ -724,23 +750,35 @@ WHERE ${table.branchName} = ${this.branchName};`;
           if (entry.type === "tree") {
             await walkTree(entry, path);
           } else {
-            let ourCurrentValue = ourTree;
+            let ourCurrentValue: TreeType | BlobType | null | undefined =
+              ourTree;
             path.split(sep).forEach((part, i) => {
-              if (ourCurrentValue.entries[part]) {
-                ourCurrentValue = ourCurrentValue.entries[part];
-                if (i === path.split(sep).length - 1) {
-                  if (ourCurrentValue.oid !== entry.oid) {
-                    console.log("conflict", ourCurrentValue.oid, path);
+              if (ourCurrentValue?.type === "tree") {
+                if (ourCurrentValue.entries[part]) {
+                  ourCurrentValue = ourCurrentValue.entries[part];
+                  if (i === path.split(sep).length - 1) {
+                    if (ourCurrentValue.oid !== entry.oid) {
+                      const entryForMergeBase = GitExec.readFromTree({
+                        tree: JSON.parse(mergeBase.tree),
+                        path,
+                      });
+                      blobsToMerge[path] = {
+                        oursIsSameAsBase:
+                          entryForMergeBase?.oid === ourCurrentValue.oid,
+                        ourOid: ourCurrentValue.oid,
+                        theirOid: entry.oid,
+                      };
+                    }
                   }
-                }
-              } else {
-                if (i === path.split(sep).length - 1) {
-                  blobsToAdd[path] = entry;
-                  GitExec.updateTree({
-                    tree: ourTree,
-                    path,
-                    blobOid: entry.oid,
-                  });
+                } else {
+                  if (i === path.split(sep).length - 1) {
+                    blobsToAdd[path] = entry;
+                    GitExec.updateTree({
+                      tree: ourTree,
+                      path,
+                      blobOid: entry.oid,
+                    });
+                  }
                 }
               }
             });
@@ -757,13 +795,17 @@ WHERE ${table.branchName} = ${this.branchName};`;
           if (entry.type === "tree") {
             await walkTree2(entry, path);
           } else {
-            let theirCurrentValue = theirTree;
+            let theirCurrentValue: TreeType | BlobType | null | undefined =
+              theirTree;
             path.split(sep).forEach((part, i) => {
-              if (theirCurrentValue.entries[part]) {
+              if (
+                theirCurrentValue?.type === "tree" &&
+                theirCurrentValue.entries[part]
+              ) {
                 theirCurrentValue = theirCurrentValue.entries[part];
                 if (i === path.split(sep).length - 1) {
                   if (theirCurrentValue.oid !== entry.oid) {
-                    console.log("conflict", theirCurrentValue.oid, path);
+                    // Do nothing, I think this is already handled in the first walk
                   }
                 }
               } else {
@@ -777,6 +819,30 @@ WHERE ${table.branchName} = ${this.branchName};`;
         }
       };
       await walkTree2(ourTree);
+      for await (const [path, entry] of Object.entries(blobsToMerge)) {
+        if (entry.oursIsSameAsBase) {
+          // This is a clean merge, different from a fast-forward
+          // because other changes might have been made to the branch
+          await this.db
+            .delete(tables.blobsToBranches)
+            .where(
+              and(
+                eq(tables.blobsToBranches.orgName, this.orgName),
+                eq(tables.blobsToBranches.repoName, this.repoName),
+                eq(tables.blobsToBranches.branchName, this.branchName),
+                eq(tables.blobsToBranches.path, path)
+              )
+            );
+          await this.db.insert(tables.blobsToBranches).values({
+            blobOid: entry.theirOid,
+            path: path,
+            directory: createSortableDirectoryPath(path),
+            orgName: this.orgName,
+            repoName: this.repoName,
+            branchName: this.branchName,
+          });
+        }
+      }
       for await (const [path, entry] of Object.entries(blobsToAdd)) {
         await this.db.insert(tables.blobsToBranches).values({
           blobOid: entry.oid,
@@ -787,7 +853,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
           branchName: this.branchName,
         });
       }
-      for await (const [path, entry] of Object.entries(blobsToRemove)) {
+      for await (const [path] of Object.entries(blobsToRemove)) {
         await this.db
           .delete(tables.blobsToBranches)
           .where(
@@ -816,15 +882,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
       const baseCommit = mergeBase;
       const ourCommit = await this.currentCommit();
       const theirCommit = await branchToMerge.currentCommit();
-      console.log({
-        baseCommit: baseCommit?.oid,
-        ourCommit: ourCommit.oid,
-        theirCommit: theirCommit.oid,
-      });
       const walkTree = async (
         a: TreeType,
-        parentPath?: string,
-        callback: (something: any) => void
+        parentPath: string | null | undefined,
+        callback: (something: { path: string; oid: string }) => void
       ) => {
         for await (const [name, entry] of Object.entries(a.entries)) {
           const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
@@ -843,20 +904,27 @@ WHERE ${table.branchName} = ${this.branchName};`;
         tree: TreeType;
       }): { type: "missing" } | { type: "found"; oid: string } => {
         const pathParts = path.split(sep);
-        let current = tree;
-        let result = { type: "found", oid: "" };
+        let current: TreeType | BlobType | undefined | null = tree;
+        let result: { type: "missing" } | { type: "found"; oid: string } = {
+          type: "found",
+          oid: "",
+        };
         pathParts.forEach((part, i) => {
-          if (!current.entries) {
-            throw new Error(`Expected current to have entries at path ${path}`);
-          }
-          if (pathParts.length - 1 === i) {
-            if (!current.entries[part]) {
-              result = { type: "missing" };
-            } else {
-              result = { type: "found", oid: current.entries[part].oid };
+          if (current?.type === "tree") {
+            if (!current.entries) {
+              throw new Error(
+                `Expected current to have entries at path ${path}`
+              );
             }
-          } else {
-            current = current.entries[part];
+            if (pathParts.length - 1 === i) {
+              if (!current.entries[part]) {
+                result = { type: "missing" };
+              } else {
+                result = { type: "found", oid: current.entries[part].oid };
+              }
+            } else {
+              current = current.entries[part];
+            }
           }
         });
         return result;
@@ -872,6 +940,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
         }
       });
       const itemsFromTheirsToAdd: { path: string; oid: string }[] = [];
+      const itemsFromTheirsToMerge: Record<
+        string,
+        { oursIsSameAsBase: boolean; ourOid: string; theirOid: string }
+      > = {};
       await walkTree(theirCommit.tree, "", ({ path, oid }) => {
         const toCompare = findPathInTree({
           path,
@@ -880,9 +952,20 @@ WHERE ${table.branchName} = ${this.branchName};`;
         if (toCompare.type === "missing") {
           itemsFromTheirsToAdd.push({ path, oid: oid });
         }
+        if (toCompare.type === "found") {
+          if (toCompare.oid !== oid) {
+            const itemFromMergeBase = GitExec.readFromTree({
+              path,
+              tree: JSON.parse(mergeBase.tree),
+            });
+            itemsFromTheirsToMerge[path] = {
+              oursIsSameAsBase: toCompare.oid === itemFromMergeBase?.oid,
+              ourOid: toCompare.oid,
+              theirOid: oid,
+            };
+          }
+        }
       });
-      // console.log("itemsFromOursToAdd", itemsFromOursToAdd);
-      // console.log("itemsFromTheirsToAdd", itemsFromTheirsToAdd);
       const tree = JSON.parse(baseCommit.tree);
 
       itemsFromOursToAdd.forEach((item) => {
@@ -902,20 +985,33 @@ WHERE ${table.branchName} = ${this.branchName};`;
       });
 
       await commit.save();
-      // this results in duplicates because there isnt a unique constraint on blobs_to_branches
-      // for await (const { path, oid } of itemsFromOursToAdd) {
-      //   await this.db
-      //     .insert(tables.blobsToBranches)
-      //     .values({
-      //       blobOid: oid,
-      //       path: path,
-      //       directory: createSortableDirectoryPath(path),
-      //       orgName: this.orgName,
-      //       repoName: this.repoName,
-      //       branchName: this.branchName,
-      //     })
-      //     .onConflictDoNothing();
-      // }
+
+      for await (const [path, entry] of Object.entries(
+        itemsFromTheirsToMerge
+      )) {
+        if (entry.oursIsSameAsBase) {
+          // This is a clean merge, different from a fast-forward
+          // because other changes might have been made to the branch
+          await this.db
+            .delete(tables.blobsToBranches)
+            .where(
+              and(
+                eq(tables.blobsToBranches.orgName, this.orgName),
+                eq(tables.blobsToBranches.repoName, this.repoName),
+                eq(tables.blobsToBranches.branchName, this.branchName),
+                eq(tables.blobsToBranches.path, path)
+              )
+            );
+          await this.db.insert(tables.blobsToBranches).values({
+            blobOid: entry.theirOid,
+            path: path,
+            directory: createSortableDirectoryPath(path),
+            orgName: this.orgName,
+            repoName: this.repoName,
+            branchName: this.branchName,
+          });
+        }
+      }
       for await (const { path, oid } of itemsFromTheirsToAdd) {
         await this.db
           .insert(tables.blobsToBranches)
@@ -1261,7 +1357,7 @@ export class Commit {
     // Only dealing with single parent commits for now
     const parentOid = this.parents ? this.parents[0] : undefined;
 
-    const extra: Record<"parent", string> | Record<string, never> = {};
+    const extra: Record<"parent", string> | Record<string, unknown> = {};
     if (parentOid) {
       const parent = await this.db.query.commits.findFirst({
         where: (fields, ops) => ops.eq(fields.oid, parentOid),
@@ -1278,7 +1374,6 @@ export class Commit {
       tree: JSON.stringify(this.tree),
       ...extra,
     });
-    // .onConflictDoNothing();
   }
 }
 
