@@ -50,6 +50,131 @@ export class GitExec {
     return oid;
   }
 
+  async findBaseCommit(args: { ourCommitOid: string; theirCommitOid: string }) {
+    const ourCommit = await this.db.query.commits.findFirst({
+      where: (fields, ops) => ops.eq(fields.oid, args.ourCommitOid),
+      columns: {
+        oid: true,
+      },
+      with: {
+        parent: {
+          columns: {
+            oid: true,
+          },
+          with: {
+            parent: {
+              columns: {
+                oid: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const theirCommit = await this.db.query.commits.findFirst({
+      where: (fields, ops) => ops.eq(fields.oid, args.theirCommitOid),
+      columns: {
+        oid: true,
+      },
+      with: {
+        parent: {
+          columns: {
+            oid: true,
+          },
+          with: {
+            parent: {
+              columns: {
+                oid: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ourCommit || !theirCommit) {
+      throw new Error(
+        `Unable to find commits for ${args.ourCommitOid} and ${args.theirCommitOid}`
+      );
+    }
+    const ancestorsFromThisBranch: string[] = [];
+    type CommitRecord = {
+      oid: string;
+      parent?: CommitRecord | null | undefined;
+    };
+    const traverseParentFromCommit = (
+      commitRecord: CommitRecord,
+      accumulator: string[]
+    ) => {
+      if (commitRecord.parent) {
+        accumulator.push(commitRecord.parent.oid);
+        traverseParentFromCommit(commitRecord.parent, accumulator);
+      }
+    };
+    traverseParentFromCommit(ourCommit, ancestorsFromThisBranch);
+    const ancestorsFromThatBranch: string[] = [];
+    traverseParentFromCommit(theirCommit, ancestorsFromThatBranch);
+
+    let mergeBaseOid = "";
+    for (const oid of [args.ourCommitOid, ...ancestorsFromThisBranch]) {
+      if (ancestorsFromThatBranch.includes(oid)) {
+        mergeBaseOid = oid;
+        break;
+      }
+    }
+    const mergeBase = await this.db.query.commits.findFirst({
+      where: (fields, ops) => {
+        return ops.eq(fields.oid, mergeBaseOid);
+      },
+      columns: {
+        oid: true,
+        content: true,
+        tree: true,
+      },
+    });
+    if (!mergeBase) {
+      throw new Error(
+        `Unable to find merge base for ${args.ourCommitOid} and ${args.theirCommitOid}`
+      );
+    }
+    return Commit.fromRecord({
+      db: this.db,
+      orgName: this.orgName,
+      repoName: this.repoName,
+      gitExec: this,
+      ...mergeBase,
+    });
+  }
+
+  findPathDiffs(
+    a: TreeType,
+    b: TreeType
+  ): {
+    added: { path: string; oid: string }[];
+    modified: { path: string; ourOid: string; theirOid: string }[];
+  } {
+    const added: { path: string; oid: string }[] = [];
+    const modified: { path: string; ourOid: string; theirOid: string }[] = [];
+    const walkTree = (item: TreeType, parentPath?: string) => {
+      for (const [name, entry] of Object.entries(item.entries)) {
+        if (entry.type === "tree") {
+          walkTree(entry, `${parentPath ?? ""}${parentPath ? sep : ""}${name}`);
+        } else {
+          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
+          const found = GitExec.readFromTree({ tree: b, path });
+          if (!found) {
+            added.push({ path, oid: entry.oid });
+          }
+          if (found && found.oid !== entry.oid) {
+            modified.push({ path, ourOid: found.oid, theirOid: entry.oid });
+          }
+        }
+      }
+    };
+    walkTree(a);
+    return { added, modified };
+  }
+
   async writeBlob(args: { path: string; oid: string; branchName: string }) {
     const content = await this.readBlob(args.oid);
 
@@ -82,7 +207,7 @@ export class GitExec {
       if (!entry) {
         result = undefined;
       }
-      if (entry.type === "blob") {
+      if (entry?.type === "blob") {
         result = entry;
       } else {
         currentEntry = entry;
@@ -652,382 +777,108 @@ WHERE ${table.branchName} = ${this.branchName};`;
     return newBranch;
   }
 
+  async diff(branchToMerge: Branch) {
+    const baseCommit = await this.gitExec.findBaseCommit({
+      ourCommitOid: this.commitOid,
+      theirCommitOid: branchToMerge.commitOid,
+    });
+
+    // const ourCommit = await this.currentCommit();
+    const theirCommit = await branchToMerge.currentCommit();
+
+    const addedAndModified = this.gitExec.findPathDiffs(
+      theirCommit.tree,
+      baseCommit.tree
+    );
+    const deleted = this.gitExec.findPathDiffs(
+      baseCommit.tree,
+      theirCommit.tree
+    );
+
+    return {
+      baseOid: baseCommit.oid,
+      ourOid: this.commitOid,
+      theirOid: branchToMerge.commitOid,
+      ...addedAndModified,
+      deleted: deleted.added,
+    };
+  }
+
   async merge(branchToMerge: Branch) {
-    // // find merge base
-    const commitsFromThisBranch = await this.db.query.commits.findMany({
-      where: (fields, ops) => ops.eq(fields.oid, this.commitOid),
-      columns: {
-        oid: true,
-      },
-      with: {
-        parent: {
-          columns: {
-            oid: true,
-          },
-          with: {
-            parent: {
-              columns: {
-                oid: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    const commitsFromThatBranch = await this.db.query.commits.findMany({
-      where: (fields, ops) => ops.eq(fields.oid, branchToMerge.commitOid),
-      columns: {
-        oid: true,
-      },
-      with: {
-        parent: {
-          columns: {
-            oid: true,
-          },
-          with: {
-            parent: {
-              columns: {
-                oid: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    const ancestorsFromThisBranch: string[] = [];
-    type CommitRecord = {
-      oid: string;
-      parent?: CommitRecord | null | undefined;
-    };
-    const traverseParentFromCommit = (
-      commitRecord: CommitRecord,
-      accumulator: string[]
-    ) => {
-      if (commitRecord.parent) {
-        accumulator.push(commitRecord.parent.oid);
-        traverseParentFromCommit(commitRecord.parent, accumulator);
-      }
-    };
-    traverseParentFromCommit(commitsFromThisBranch[0], ancestorsFromThisBranch);
-    const ancestorsFromThatBranch: string[] = [];
-    traverseParentFromCommit(commitsFromThatBranch[0], ancestorsFromThatBranch);
+    const diff = await this.diff(branchToMerge);
+    const currentCommit = await this.currentCommit();
 
-    let mergeBaseOid = "";
-    for (const oid of [this.commitOid, ...ancestorsFromThisBranch]) {
-      if (ancestorsFromThatBranch.includes(oid)) {
-        mergeBaseOid = oid;
-        break;
-      }
-    }
-    const mergeBase = await this.db.query.commits.findFirst({
-      where: (fields, ops) => {
-        return ops.eq(fields.oid, mergeBaseOid);
-      },
-      columns: {
-        oid: true,
-        content: true,
-        tree: true,
-      },
-    });
-    if (!mergeBase) {
-      throw new Error(
-        `Unable to find merge base for ${this.commitOid} and ${branchToMerge.commitOid}`
-      );
-    }
-    if (mergeBase?.oid === this.commitOid) {
-      // this is a fast-forward merge
-      const blobsToAdd: Record<string, { oid: string }> = {};
-      const blobsToMerge: Record<
-        string,
-        { oursIsSameAsBase: boolean; ourOid: string; theirOid: string }
-      > = {};
-      this.commitOid = branchToMerge.commitOid;
-      const ourTree = (await this.currentCommit()).tree;
-      const theirTree = (await branchToMerge.currentCommit()).tree;
-      const walkTree = async (tree: TreeType, parentPath?: string) => {
-        for await (const [name, entry] of Object.entries(tree.entries)) {
-          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
-          if (entry.type === "tree") {
-            await walkTree(entry, path);
-          } else {
-            let ourCurrentValue: TreeType | BlobType | null | undefined =
-              ourTree;
-            path.split(sep).forEach((part, i) => {
-              if (ourCurrentValue?.type === "tree") {
-                if (ourCurrentValue.entries[part]) {
-                  ourCurrentValue = ourCurrentValue.entries[part];
-                  if (i === path.split(sep).length - 1) {
-                    if (ourCurrentValue.oid !== entry.oid) {
-                      const entryForMergeBase = GitExec.readFromTree({
-                        tree: JSON.parse(mergeBase.tree),
-                        path,
-                      });
-                      blobsToMerge[path] = {
-                        oursIsSameAsBase:
-                          entryForMergeBase?.oid === ourCurrentValue.oid,
-                        ourOid: ourCurrentValue.oid,
-                        theirOid: entry.oid,
-                      };
-                    }
-                  }
-                } else {
-                  if (i === path.split(sep).length - 1) {
-                    blobsToAdd[path] = entry;
-                    GitExec.updateTree({
-                      tree: ourTree,
-                      path,
-                      blobOid: entry.oid,
-                    });
-                  }
-                }
-              }
-            });
-          }
-        }
-      };
-      await walkTree(theirTree);
-
-      // console.dir(ourTree.entries.content, { depth: null });
-      const blobsToRemove: Record<string, { oid: string }> = {};
-      const walkTree2 = async (tree: TreeType, parentPath?: string) => {
-        for await (const [name, entry] of Object.entries(tree.entries)) {
-          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
-          if (entry.type === "tree") {
-            await walkTree2(entry, path);
-          } else {
-            let theirCurrentValue: TreeType | BlobType | null | undefined =
-              theirTree;
-            path.split(sep).forEach((part, i) => {
-              if (
-                theirCurrentValue?.type === "tree" &&
-                theirCurrentValue.entries[part]
-              ) {
-                theirCurrentValue = theirCurrentValue.entries[part];
-                if (i === path.split(sep).length - 1) {
-                  if (theirCurrentValue.oid !== entry.oid) {
-                    // Do nothing, I think this is already handled in the first walk
-                  }
-                }
-              } else {
-                if (i === path.split(sep).length - 1) {
-                  blobsToRemove[path] = entry;
-                  GitExec.removeFromTree({ tree: ourTree, path });
-                }
-              }
-            });
-          }
-        }
-      };
-      await walkTree2(ourTree);
-      for await (const [path, entry] of Object.entries(blobsToMerge)) {
-        if (entry.oursIsSameAsBase) {
-          // This is a clean merge, different from a fast-forward
-          // because other changes might have been made to the branch
-          await this.db
-            .delete(tables.blobsToBranches)
-            .where(
-              and(
-                eq(tables.blobsToBranches.orgName, this.orgName),
-                eq(tables.blobsToBranches.repoName, this.repoName),
-                eq(tables.blobsToBranches.branchName, this.branchName),
-                eq(tables.blobsToBranches.path, path)
-              )
-            );
-          await this.db.insert(tables.blobsToBranches).values({
-            blobOid: entry.theirOid,
-            path: path,
-            directory: createSortableDirectoryPath(path),
-            orgName: this.orgName,
-            repoName: this.repoName,
-            branchName: this.branchName,
-          });
-        }
-      }
-      for await (const [path, entry] of Object.entries(blobsToAdd)) {
-        await this.db.insert(tables.blobsToBranches).values({
-          blobOid: entry.oid,
-          path: path,
-          directory: createSortableDirectoryPath(path),
-          orgName: this.orgName,
-          repoName: this.repoName,
-          branchName: this.branchName,
-        });
-      }
-      for await (const [path] of Object.entries(blobsToRemove)) {
-        await this.db
-          .delete(tables.blobsToBranches)
-          .where(
-            and(
-              eq(tables.blobsToBranches.orgName, this.orgName),
-              eq(tables.blobsToBranches.repoName, this.repoName),
-              eq(tables.blobsToBranches.branchName, this.branchName),
-              eq(tables.blobsToBranches.path, path)
-            )
-          );
-      }
-      const commit = new Commit({
-        orgName: this.orgName,
-        repoName: this.repoName,
-        db: this.db,
-        message: `Merged ${mergeBase.oid} and ${commitsFromThatBranch[0].oid}`,
-        tree: ourTree,
-        gitExec: this.gitExec,
-        parents: [mergeBase.oid, commitsFromThatBranch[0].oid],
-      });
-
-      await commit.save();
-
-      await this.save();
-    } else {
-      const baseCommit = mergeBase;
-      const ourCommit = await this.currentCommit();
-      const theirCommit = await branchToMerge.currentCommit();
-      const walkTree = async (
-        a: TreeType,
-        parentPath: string | null | undefined,
-        callback: (something: { path: string; oid: string }) => void
-      ) => {
-        for await (const [name, entry] of Object.entries(a.entries)) {
-          const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
-          if (entry.type === "tree") {
-            await walkTree(entry, path, callback);
-          } else {
-            callback({ path, oid: entry.oid });
-          }
-        }
-      };
-      const findPathInTree = ({
+    for await (const { path, oid } of diff.added) {
+      await this.db.insert(tables.blobsToBranches).values({
+        blobOid: oid,
         path,
-        tree,
-      }: {
-        path: string;
-        tree: TreeType;
-      }): { type: "missing" } | { type: "found"; oid: string } => {
-        const pathParts = path.split(sep);
-        let current: TreeType | BlobType | undefined | null = tree;
-        let result: { type: "missing" } | { type: "found"; oid: string } = {
-          type: "found",
-          oid: "",
-        };
-        pathParts.forEach((part, i) => {
-          if (current?.type === "tree") {
-            if (!current.entries) {
-              throw new Error(
-                `Expected current to have entries at path ${path}`
-              );
-            }
-            if (pathParts.length - 1 === i) {
-              if (!current.entries[part]) {
-                result = { type: "missing" };
-              } else {
-                result = { type: "found", oid: current.entries[part].oid };
-              }
-            } else {
-              current = current.entries[part];
-            }
-          }
-        });
-        return result;
-      };
-      const itemsFromOursToAdd: { path: string; oid: string }[] = [];
-      await walkTree(ourCommit.tree, "", ({ path, oid }) => {
-        const toCompare = findPathInTree({
-          path,
-          tree: JSON.parse(baseCommit.tree),
-        });
-        if (toCompare.type === "missing") {
-          itemsFromOursToAdd.push({ path, oid: oid });
-        }
-      });
-      const itemsFromTheirsToAdd: { path: string; oid: string }[] = [];
-      const itemsFromTheirsToMerge: Record<
-        string,
-        { oursIsSameAsBase: boolean; ourOid: string; theirOid: string }
-      > = {};
-      await walkTree(theirCommit.tree, "", ({ path, oid }) => {
-        const toCompare = findPathInTree({
-          path,
-          tree: JSON.parse(baseCommit.tree),
-        });
-        if (toCompare.type === "missing") {
-          itemsFromTheirsToAdd.push({ path, oid: oid });
-        }
-        if (toCompare.type === "found") {
-          if (toCompare.oid !== oid) {
-            const itemFromMergeBase = GitExec.readFromTree({
-              path,
-              tree: JSON.parse(mergeBase.tree),
-            });
-            itemsFromTheirsToMerge[path] = {
-              oursIsSameAsBase: toCompare.oid === itemFromMergeBase?.oid,
-              ourOid: toCompare.oid,
-              theirOid: oid,
-            };
-          }
-        }
-      });
-      const tree = JSON.parse(baseCommit.tree);
-
-      itemsFromOursToAdd.forEach((item) => {
-        GitExec.updateTree({ tree: tree, path: item.path, blobOid: item.oid });
-      });
-      itemsFromTheirsToAdd.forEach((item) => {
-        GitExec.updateTree({ tree: tree, path: item.path, blobOid: item.oid });
-      });
-      const commit = new Commit({
+        directory: createSortableDirectoryPath(path),
         orgName: this.orgName,
         repoName: this.repoName,
-        db: this.db,
-        message: `Merged ${ourCommit.oid} and ${theirCommit.oid}`,
-        tree: tree,
-        gitExec: this.gitExec,
-        parents: [ourCommit.oid, theirCommit.oid],
+        branchName: this.branchName,
       });
-
-      await commit.save();
-
-      for await (const [path, entry] of Object.entries(
-        itemsFromTheirsToMerge
-      )) {
-        if (entry.oursIsSameAsBase) {
-          // This is a clean merge, different from a fast-forward
-          // because other changes might have been made to the branch
-          await this.db
-            .delete(tables.blobsToBranches)
-            .where(
-              and(
-                eq(tables.blobsToBranches.orgName, this.orgName),
-                eq(tables.blobsToBranches.repoName, this.repoName),
-                eq(tables.blobsToBranches.branchName, this.branchName),
-                eq(tables.blobsToBranches.path, path)
-              )
-            );
-          await this.db.insert(tables.blobsToBranches).values({
-            blobOid: entry.theirOid,
-            path: path,
-            directory: createSortableDirectoryPath(path),
-            orgName: this.orgName,
-            repoName: this.repoName,
-            branchName: this.branchName,
-          });
-        }
-      }
-      for await (const { path, oid } of itemsFromTheirsToAdd) {
-        await this.db
-          .insert(tables.blobsToBranches)
-          .values({
-            blobOid: oid,
-            path: path,
-            directory: createSortableDirectoryPath(path),
-            orgName: this.orgName,
-            repoName: this.repoName,
-            branchName: this.branchName,
-          })
-          .onConflictDoNothing();
-      }
-      this.commitOid = commit.oid;
-      await this.save();
     }
+    for await (const { path, ourOid, theirOid } of diff.modified) {
+      await this.db
+        .update(tables.blobsToBranches)
+        .set({
+          blobOid: theirOid,
+        })
+        .where(
+          and(
+            eq(tables.blobsToBranches.orgName, this.orgName),
+            eq(tables.blobsToBranches.repoName, this.repoName),
+            eq(tables.blobsToBranches.branchName, this.branchName),
+            eq(tables.blobsToBranches.path, path),
+            eq(tables.blobsToBranches.blobOid, ourOid)
+          )
+        );
+    }
+    for await (const { path, oid } of diff.deleted) {
+      await this.db
+        .delete(tables.blobsToBranches)
+        .where(
+          and(
+            eq(tables.blobsToBranches.orgName, this.orgName),
+            eq(tables.blobsToBranches.repoName, this.repoName),
+            eq(tables.blobsToBranches.branchName, this.branchName),
+            eq(tables.blobsToBranches.path, path),
+            eq(tables.blobsToBranches.blobOid, oid)
+          )
+        );
+    }
+
+    const isFastForward = diff.baseOid === this.commitOid;
+    if (isFastForward) {
+      this.commitOid = branchToMerge.commitOid;
+    } else {
+      for await (const { path, oid } of diff.added) {
+        GitExec.updateTree({ tree: currentCommit.tree, path, blobOid: oid });
+      }
+      for await (const { path, theirOid } of diff.modified) {
+        GitExec.updateTree({
+          tree: currentCommit.tree,
+          path,
+          blobOid: theirOid,
+        });
+      }
+      for await (const { path } of diff.deleted) {
+        GitExec.removeFromTree({ tree: currentCommit.tree, path });
+      }
+
+      const commit = new Commit({
+        db: this.db,
+        gitExec: this.gitExec,
+        message: `Merged ${this.commitOid} and ${branchToMerge.commitOid}`,
+        parents: [this.commitOid, branchToMerge.commitOid],
+        orgName: this.orgName,
+        repoName: this.repoName,
+        tree: currentCommit.tree,
+      });
+      await commit.save();
+      this.commitOid = commit.oid;
+    }
+    this.save();
   }
 
   whereClause(
@@ -1351,6 +1202,10 @@ export class Commit {
       tree: tree,
       gitExec: value.gitExec,
     });
+  }
+
+  getEntryForPath(path: string) {
+    return GitExec.readFromTree({ tree: this.tree, path });
   }
 
   async save() {

@@ -240,6 +240,207 @@ describe("clone", async () => {
     const result5 = await branch.find({ path: "content/movies/movie10.json" });
     expect(result5?.item).toEqual(result3?.item);
   });
+  it("merge on added items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    await featureBranch.upsert({
+      path: "content/movies/movie10.json",
+      content: "some-content",
+    });
+    await branch.merge(featureBranch);
+    const result = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result).not.toBeNull();
+    const entry = (await branch.currentCommit()).getEntryForPath(
+      "content/movies/movie10.json"
+    );
+    expect(entry?.oid).toEqual(result?.item.blob.oid);
+  });
+  it("merge on updated items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    await featureBranch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-content",
+    });
+    await branch.merge(featureBranch);
+    const result = await branch.find({ path: "content/movies/movie2.json" });
+    expect(result?.item.blob.content).toEqual("some-content");
+    const entry = (await branch.currentCommit()).getEntryForPath(
+      "content/movies/movie2.json"
+    );
+    expect(entry?.oid).toEqual(result?.item.blob.oid);
+  });
+  it("merge on deleted items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    await featureBranch.delete({
+      path: "content/movies/movie2.json",
+    });
+    await branch.merge(featureBranch);
+    const result = await branch.find({ path: "content/movies/movie2.json" });
+    expect(result).toBeNull();
+    const entry = (await branch.currentCommit()).getEntryForPath(
+      "content/movies/movie2.json"
+    );
+    expect(entry).toBeUndefined();
+  });
+  it("diffs added items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result).toBeNull();
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    expect(branch.commitOid).toEqual(featureBranch.commitOid);
+
+    await featureBranch.upsert({
+      path: "content/movies/movie10.json",
+      content: "some-content",
+    });
+    const result3 = await featureBranch.find({
+      path: "content/movies/movie10.json",
+    });
+    expect(result3).not.toBeNull();
+    const result4 = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result4).toBeNull();
+
+    const diffs = await branch.diff(featureBranch);
+    expect(diffs.added).toMatchInlineSnapshot(`
+      [
+        {
+          "oid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
+          "path": "content/movies/movie10.json",
+        },
+      ]
+    `);
+  });
+  it("diffs deleted items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result).toBeNull();
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    expect(branch.commitOid).toEqual(featureBranch.commitOid);
+
+    await featureBranch.delete({
+      path: "content/movies/movie2.json",
+    });
+
+    const diffs = await branch.diff(featureBranch);
+    expect(diffs.deleted).toMatchInlineSnapshot(`
+      [
+        {
+          "oid": "68ba6caaf14afcc396260bd50645df85f0831167",
+          "path": "content/movies/movie2.json",
+        },
+      ]
+    `);
+  });
+  it("diffs modified items", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const result = await branch.find({ path: "content/movies/movie10.json" });
+    expect(result).toBeNull();
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    expect(branch.commitOid).toEqual(featureBranch.commitOid);
+
+    await featureBranch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-new-content",
+    });
+
+    const diffs = await branch.diff(featureBranch);
+    expect(diffs.modified).toMatchInlineSnapshot(`
+      [
+        {
+          "ourOid": "68ba6caaf14afcc396260bd50645df85f0831167",
+          "path": "content/movies/movie2.json",
+          "theirOid": "f349ff82b55ef79d9e14807a009b57d2f97697ae",
+        },
+      ]
+    `);
+  });
   it("performs a fast-forward merge when an item was modified", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,
