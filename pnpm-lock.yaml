@@ -17,6 +17,9 @@ dependencies:
   '@remix-run/serve':
     specifier: ^2.8.1
     version: 2.8.1(typescript@5.4.5)
+  '@types/diff3':
+    specifier: ^0.0.2
+    version: 0.0.2
   '@vercel/remix':
     specifier: ^2.9.1
     version: 2.9.1(@remix-run/dev@2.8.1)(@remix-run/node@2.8.1)(@remix-run/server-runtime@2.9.1)(react-dom@18.2.0)(react@18.2.0)
@@ -1915,6 +1918,10 @@ packages:
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
     dependencies:
       '@types/ms': 0.7.34
+
+  /@types/diff3@0.0.2:
+    resolution: {integrity: sha512-X4VS60B44m7xh6bln6372LXdxS0iWWNbiZV4cfEC1WmHuew1lT3FxXnXZIwxV8qhIGJO5TsFo8VBHsVftUgKNw==}
+    dev: false
 
   /@types/estree-jsx@1.0.5:
     resolution: {integrity: sha512-52CcUVNFyfb1A2ALocQw/Dd1BQFNmSdkuC3BkZ6iqhdMfQz7JWOFRuJFloOzjk+6WijU56m9oKXFAXc7o3Towg==}

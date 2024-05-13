@@ -10,6 +10,7 @@ import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
 import crypto from "crypto";
 import tmp from "tmp-promise";
+import diff3Merge from "diff3";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
@@ -146,33 +147,76 @@ export class GitExec {
     });
   }
 
-  findPathDiffs(
-    a: TreeType,
-    b: TreeType
-  ): {
-    added: { path: string; oid: string }[];
-    modified: { path: string; ourOid: string; theirOid: string }[];
+  findDiffs({
+    ourTree,
+    theirTree,
+    baseTree,
+  }: {
+    ourTree: TreeType;
+    theirTree: TreeType;
+    baseTree: TreeType;
+  }): {
+    added: { path: string; theirOid: string }[];
+    modified: {
+      path: string;
+      ourOid?: string;
+      baseOid: string;
+      theirOid: string;
+    }[];
+    deleted: { path: string; baseOid: string; ourOid?: string }[];
   } {
-    const added: { path: string; oid: string }[] = [];
-    const modified: { path: string; ourOid: string; theirOid: string }[] = [];
-    const walkTree = (item: TreeType, parentPath?: string) => {
+    const added: { path: string; theirOid: string }[] = [];
+    const modified: {
+      path: string;
+      ourOid?: string;
+      baseOid: string;
+      theirOid: string;
+    }[] = [];
+    const deleted: { path: string; baseOid: string; ourOid?: string }[] = [];
+    const walkTree = (
+      item: TreeType,
+      parentPath: string | null,
+      type: "addedAndModified" | "deleted"
+    ) => {
       for (const [name, entry] of Object.entries(item.entries)) {
         if (entry.type === "tree") {
-          walkTree(entry, `${parentPath ?? ""}${parentPath ? sep : ""}${name}`);
+          walkTree(
+            entry,
+            `${parentPath ?? ""}${parentPath ? sep : ""}${name}`,
+            type
+          );
         } else {
           const path = `${parentPath ?? ""}${parentPath ? sep : ""}${name}`;
-          const found = GitExec.readFromTree({ tree: b, path });
-          if (!found) {
-            added.push({ path, oid: entry.oid });
+          if (type === "addedAndModified") {
+            const found = GitExec.readFromTree({ tree: baseTree, path });
+            if (!found) {
+              added.push({ path, theirOid: entry.oid });
+            }
+            if (found && found.oid !== entry.oid) {
+              if (type === "addedAndModified") {
+                const ourEntry = GitExec.readFromTree({ tree: ourTree, path });
+                modified.push({
+                  path,
+                  theirOid: entry.oid,
+                  baseOid: found.oid,
+                  ourOid: ourEntry?.oid,
+                });
+              }
+            }
           }
-          if (found && found.oid !== entry.oid) {
-            modified.push({ path, ourOid: found.oid, theirOid: entry.oid });
+          if (type === "deleted") {
+            const found = GitExec.readFromTree({ tree: theirTree, path });
+            const ourEntry = GitExec.readFromTree({ tree: ourTree, path });
+            if (!found) {
+              deleted.push({ path, baseOid: entry.oid, ourOid: ourEntry?.oid });
+            }
           }
         }
       }
     };
-    walkTree(a);
-    return { added, modified };
+    walkTree(theirTree, null, "addedAndModified");
+    walkTree(baseTree, null, "deleted");
+    return { added, modified, deleted };
   }
 
   async writeBlob(args: { path: string; oid: string; branchName: string }) {
@@ -783,24 +827,17 @@ WHERE ${table.branchName} = ${this.branchName};`;
       theirCommitOid: branchToMerge.commitOid,
     });
 
-    // const ourCommit = await this.currentCommit();
+    const ourCommit = await this.currentCommit();
     const theirCommit = await branchToMerge.currentCommit();
 
-    const addedAndModified = this.gitExec.findPathDiffs(
-      theirCommit.tree,
-      baseCommit.tree
-    );
-    const deleted = this.gitExec.findPathDiffs(
-      baseCommit.tree,
-      theirCommit.tree
-    );
-
+    const diff = this.gitExec.findDiffs({
+      ourTree: ourCommit.tree,
+      theirTree: theirCommit.tree,
+      baseTree: baseCommit.tree,
+    });
     return {
       baseOid: baseCommit.oid,
-      ourOid: this.commitOid,
-      theirOid: branchToMerge.commitOid,
-      ...addedAndModified,
-      deleted: deleted.added,
+      ...diff,
     };
   }
 
@@ -808,9 +845,9 @@ WHERE ${table.branchName} = ${this.branchName};`;
     const diff = await this.diff(branchToMerge);
     const currentCommit = await this.currentCommit();
 
-    for await (const { path, oid } of diff.added) {
+    for await (const { path, theirOid } of diff.added) {
       await this.db.insert(tables.blobsToBranches).values({
-        blobOid: oid,
+        blobOid: theirOid,
         path,
         directory: createSortableDirectoryPath(path),
         orgName: this.orgName,
@@ -818,42 +855,101 @@ WHERE ${table.branchName} = ${this.branchName};`;
         branchName: this.branchName,
       });
     }
-    for await (const { path, ourOid, theirOid } of diff.modified) {
-      await this.db
-        .update(tables.blobsToBranches)
-        .set({
-          blobOid: theirOid,
-        })
-        .where(
+    for await (const { path, ourOid, baseOid, theirOid } of diff.modified) {
+      const baseCommit = await this.db.query.commits.findFirst({
+        where: (fields, ops) => ops.and(ops.eq(fields.oid, diff.baseOid)),
+      });
+      if (baseCommit) {
+        const baseBlob = await this.db.query.blobs.findFirst({
+          where(fields, ops) {
+            return ops.and(ops.eq(fields.oid, baseOid));
+          },
+        });
+        if (ourOid) {
+          const ourBlob = await this.db.query.blobs.findFirst({
+            where(fields, ops) {
+              return ops.and(ops.eq(fields.oid, ourOid));
+            },
+          });
+
+          const theirBlob = await this.db.query.blobs.findFirst({
+            where(fields, ops) {
+              return ops.and(ops.eq(fields.oid, theirOid));
+            },
+          });
+          if (!ourBlob || !theirBlob || !baseBlob) {
+            throw new Error(
+              `Unable to find blobs for ${ourOid} and ${theirOid}`
+            );
+          }
+          baseBlob;
+          const ourContent = Buffer.from(ourBlob.content).toString("utf8");
+          const baseContent = Buffer.from(baseBlob.content).toString("utf8");
+          const theirContent = Buffer.from(theirBlob.content).toString("utf8");
+          const { mergedText, cleanMerge } = await mergeFile({
+            branches: [
+              "should not matter",
+              this.branchName,
+              branchToMerge.branchName,
+            ],
+            contents: [baseContent, ourContent, theirContent],
+          });
+          if (!cleanMerge) {
+            throw new Error(`Unable to merge \n${mergedText}`);
+          } else {
+            await this.db
+              .update(tables.blobsToBranches)
+              .set({
+                blobOid: theirOid,
+              })
+              .where(
+                and(
+                  eq(tables.blobsToBranches.orgName, this.orgName),
+                  eq(tables.blobsToBranches.repoName, this.repoName),
+                  eq(tables.blobsToBranches.branchName, this.branchName),
+                  eq(tables.blobsToBranches.path, path),
+                  eq(tables.blobsToBranches.blobOid, ourOid)
+                )
+              );
+          }
+        }
+      }
+    }
+    for await (const { path, baseOid, ourOid } of diff.deleted) {
+      await this.db.delete(tables.blobsToBranches).where(
+        and(
+          eq(tables.blobsToBranches.orgName, this.orgName),
+          eq(tables.blobsToBranches.repoName, this.repoName),
+          eq(tables.blobsToBranches.branchName, this.branchName),
+          eq(tables.blobsToBranches.path, path),
+          // FIXME: This should be ourOid
+          eq(tables.blobsToBranches.blobOid, baseOid)
+        )
+      );
+      if (ourOid) {
+        await this.db.delete(tables.blobsToBranches).where(
           and(
             eq(tables.blobsToBranches.orgName, this.orgName),
             eq(tables.blobsToBranches.repoName, this.repoName),
             eq(tables.blobsToBranches.branchName, this.branchName),
             eq(tables.blobsToBranches.path, path),
+            // FIXME: This should be ourOid
             eq(tables.blobsToBranches.blobOid, ourOid)
           )
         );
-    }
-    for await (const { path, oid } of diff.deleted) {
-      await this.db
-        .delete(tables.blobsToBranches)
-        .where(
-          and(
-            eq(tables.blobsToBranches.orgName, this.orgName),
-            eq(tables.blobsToBranches.repoName, this.repoName),
-            eq(tables.blobsToBranches.branchName, this.branchName),
-            eq(tables.blobsToBranches.path, path),
-            eq(tables.blobsToBranches.blobOid, oid)
-          )
-        );
+      }
     }
 
     const isFastForward = diff.baseOid === this.commitOid;
     if (isFastForward) {
       this.commitOid = branchToMerge.commitOid;
     } else {
-      for await (const { path, oid } of diff.added) {
-        GitExec.updateTree({ tree: currentCommit.tree, path, blobOid: oid });
+      for await (const { path, theirOid } of diff.added) {
+        GitExec.updateTree({
+          tree: currentCommit.tree,
+          path,
+          blobOid: theirOid,
+        });
       }
       for await (const { path, theirOid } of diff.modified) {
         GitExec.updateTree({
@@ -1061,7 +1157,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
           eq(tables.branches.branchName, this.branchName)
         )
       );
-    this.commitOid = await commit.oid;
+    this.commitOid = commit.oid;
+    await this.save();
 
     return { [args.path]: blobOid };
   }
@@ -1301,3 +1398,49 @@ const createSortableDirectoryPath = (path: string) => {
 //     "used": 1
 //   }
 // }
+
+const LINEBREAKS = /^.*(\r?\n|$)/gm;
+
+export function mergeFile({
+  branches,
+  contents,
+}: {
+  branches: string[];
+  contents: string[];
+}) {
+  const ourName = branches[1];
+  const theirName = branches[2];
+
+  const baseContent = contents[0];
+  const ourContent = contents[1];
+  const theirContent = contents[2];
+
+  const ours = ourContent.match(LINEBREAKS);
+  const base = baseContent.match(LINEBREAKS);
+  const theirs = theirContent.match(LINEBREAKS);
+
+  // Here we let the diff3 library do the heavy lifting.
+  const result = diff3Merge(ours, base, theirs);
+
+  const markerSize = 7;
+
+  // Here we note whether there are conflicts and format the results
+  let mergedText = "";
+  let cleanMerge = true;
+
+  for (const item of result) {
+    if (item.ok) {
+      mergedText += item.ok.join("");
+    }
+    if (item.conflict) {
+      cleanMerge = false;
+      mergedText += `${"<".repeat(markerSize)} ${ourName}\n`;
+      mergedText += item.conflict.a.join("");
+
+      mergedText += `${"=".repeat(markerSize)}\n`;
+      mergedText += item.conflict.b.join("");
+      mergedText += `${">".repeat(markerSize)} ${theirName}\n`;
+    }
+  }
+  return { cleanMerge, mergedText };
+}

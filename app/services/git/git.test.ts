@@ -362,8 +362,8 @@ describe("clone", async () => {
     expect(diffs.added).toMatchInlineSnapshot(`
       [
         {
-          "oid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
           "path": "content/movies/movie10.json",
+          "theirOid": "74cd6e7f8ed6a461d89b53663bf6c0c31c7f18c0",
         },
       ]
     `);
@@ -397,7 +397,8 @@ describe("clone", async () => {
     expect(diffs.deleted).toMatchInlineSnapshot(`
       [
         {
-          "oid": "68ba6caaf14afcc396260bd50645df85f0831167",
+          "baseOid": "68ba6caaf14afcc396260bd50645df85f0831167",
+          "ourOid": "68ba6caaf14afcc396260bd50645df85f0831167",
           "path": "content/movies/movie2.json",
         },
       ]
@@ -434,6 +435,7 @@ describe("clone", async () => {
     expect(diffs.modified).toMatchInlineSnapshot(`
       [
         {
+          "baseOid": "68ba6caaf14afcc396260bd50645df85f0831167",
           "ourOid": "68ba6caaf14afcc396260bd50645df85f0831167",
           "path": "content/movies/movie2.json",
           "theirOid": "f349ff82b55ef79d9e14807a009b57d2f97697ae",
@@ -545,5 +547,32 @@ describe("clone", async () => {
     await branch.merge(featureBranch);
     const result5 = await branch.find({ path: "content/movies/movie2.json" });
     expect(result5).toBeNull();
+  });
+  it("shows a merge conflict for a file that has been changed by both", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    await branch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-other-content",
+    });
+    await featureBranch.upsert({
+      path: "content/movies/movie2.json",
+      content: "some-content",
+    });
+    await expect(() => branch.merge(featureBranch)).rejects.toThrowError();
   });
 });
