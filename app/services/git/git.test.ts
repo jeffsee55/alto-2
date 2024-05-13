@@ -575,4 +575,52 @@ describe("clone", async () => {
     });
     await expect(() => branch.merge(featureBranch)).rejects.toThrowError();
   });
+  it("merges for a file that has been changed by both", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    // Create a baseline version that will be changed after the branch split
+    await branch.upsert({
+      path: "content/actors/actor1.md",
+      content: `This is some text
+
+      And here is some more text
+      `,
+    });
+
+    const featureBranch = await branch.checkoutNewBranch({
+      newBranchName: "feature-2",
+    });
+    await branch.upsert({
+      path: "content/actors/actor1.md",
+      content: `This is some text. Adding more text to the first line from the "main" branch
+
+      And here is some more text
+      `,
+    });
+    await featureBranch.upsert({
+      path: "content/actors/actor1.md",
+      content: `This is some text
+
+      And here is some more text. Adding more text to the second line from the "feature-2" branch
+      `,
+    });
+    await branch.merge(featureBranch);
+    const result = await branch.find({ path: "content/actors/actor1.md" });
+    expect(result?.item.blob.content)
+      .toEqual(`This is some text. Adding more text to the first line from the "main" branch
+
+      And here is some more text. Adding more text to the second line from the "feature-2" branch
+      `);
+  });
 });

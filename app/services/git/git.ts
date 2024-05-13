@@ -897,10 +897,18 @@ WHERE ${table.branchName} = ${this.branchName};`;
           if (!cleanMerge) {
             throw new Error(`Unable to merge \n${mergedText}`);
           } else {
+            const oid = await GitExec.hashBlob(mergedText);
+            await this.db
+              .insert(tables.blobs)
+              .values({
+                oid: oid,
+                content: mergedText,
+              })
+              .onConflictDoNothing();
             await this.db
               .update(tables.blobsToBranches)
               .set({
-                blobOid: theirOid,
+                blobOid: oid,
               })
               .where(
                 and(
