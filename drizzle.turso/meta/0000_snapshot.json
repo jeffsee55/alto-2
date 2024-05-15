@@ -1,0 +1,262 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "c4b9a3f8-86ba-42cc-b859-311a67e17d13",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "blobs": {
+      "name": "blobs",
+      "columns": {
+        "oid": {
+          "name": "oid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "blobs_to_branches": {
+      "name": "blobs_to_branches",
+      "columns": {
+        "org_name": {
+          "name": "org_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "repo_name": {
+          "name": "repo_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "branch_name": {
+          "name": "branch_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "blob_oid": {
+          "name": "blob_oid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "directory": {
+          "name": "directory",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "blobs_to_branches_blob_oid_blobs_oid_fk": {
+          "name": "blobs_to_branches_blob_oid_blobs_oid_fk",
+          "tableFrom": "blobs_to_branches",
+          "tableTo": "blobs",
+          "columnsFrom": [
+            "blob_oid"
+          ],
+          "columnsTo": [
+            "oid"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "branch": {
+          "name": "branch",
+          "tableFrom": "blobs_to_branches",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "org_name",
+            "repo_name",
+            "branch_name"
+          ],
+          "columnsTo": [
+            "org_name",
+            "repo_name",
+            "branch_name"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "branches": {
+      "name": "branches",
+      "columns": {
+        "org_name": {
+          "name": "org_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "repo_name": {
+          "name": "repo_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "branch_name": {
+          "name": "branch_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "commit_oid": {
+          "name": "commit_oid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "branches_commit_oid_commits_oid_fk": {
+          "name": "branches_commit_oid_commits_oid_fk",
+          "tableFrom": "branches",
+          "tableTo": "commits",
+          "columnsFrom": [
+            "commit_oid"
+          ],
+          "columnsTo": [
+            "oid"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "repo": {
+          "name": "repo",
+          "tableFrom": "branches",
+          "tableTo": "repos",
+          "columnsFrom": [
+            "org_name",
+            "repo_name"
+          ],
+          "columnsTo": [
+            "org_name",
+            "repo_name"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "branches_org_name_repo_name_branch_name_pk": {
+          "columns": [
+            "branch_name",
+            "org_name",
+            "repo_name"
+          ],
+          "name": "branches_org_name_repo_name_branch_name_pk"
+        }
+      },
+      "uniqueConstraints": {}
+    },
+    "commits": {
+      "name": "commits",
+      "columns": {
+        "oid": {
+          "name": "oid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tree": {
+          "name": "tree",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parent": {
+          "name": "parent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "repos": {
+      "name": "repos",
+      "columns": {
+        "org_name": {
+          "name": "org_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "repo_name": {
+          "name": "repo_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "repos_org_name_repo_name_pk": {
+          "columns": [
+            "org_name",
+            "repo_name"
+          ],
+          "name": "repos_org_name_repo_name_pk"
+        }
+      },
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}

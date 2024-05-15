@@ -1,4 +1,4 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { MetaFunction, HeadersFunction } from "@remix-run/node";
 import { clsx } from "clsx";
 import {
   BoltIcon,
@@ -10,6 +10,7 @@ import {
 import { Repo, movieRepoPath, movieRepoConfig } from "~/services/git/git";
 import { Link, useLoaderData } from "@remix-run/react";
 import { loadDatabase } from "~/services/git/database";
+import React from "react";
 
 export const meta: MetaFunction = () => {
   return [
@@ -17,6 +18,11 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "Welcome to Remix!" },
   ];
 };
+
+export const headers: HeadersFunction = () => ({
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Opener-Policy": "same-origin",
+});
 
 export async function loader() {
   const { db } = loadDatabase();
@@ -32,20 +38,32 @@ export async function loader() {
   const branch = await repo.getBranch({ branchName: "main" });
 
   const result = await branch.list();
-  console.log(result.items);
+  // console.log(result.items);
   return result;
 }
+
+const Database = React.lazy(() => import("~/components/db"));
 
 export default function Index() {
   const data = useLoaderData<typeof loader>();
 
-  console.log(JSON.stringify(data));
+  const [isBrowser, setIsBrowser] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsBrowser(true);
+  }, []);
+
+  if (!isBrowser) {
+    return null;
+  }
+
   return (
     <div className="h-screen w-screen bg-zinc-900 text-white flex flex-col">
       <div className="h-16 w-full border-b border-zinc-800 flex justify-between items-center">
         <div className="w-20 h-16 flex items-center border-r border-zinc-800">
           <div className="py-2 px-4 font-display text-2xl font-bold">Alto</div>
         </div>
+        <Database />
         <div className="flex w-96">
           <label htmlFor="search-field" className="sr-only">
             Search
@@ -198,9 +216,9 @@ const Deployments = () => {
       </header>
 
       <ul className="divide-y divide-white/5">
-        {deployments.map((deployment) => (
+        {deployments.map((deployment, i) => (
           <li
-            key={deployment.id}
+            key={i}
             className="relative flex items-center space-x-4 px-4 py-4 sm:px-6 lg:px-8"
           >
             <div className="min-w-0 flex-auto">
@@ -252,4 +270,29 @@ const Deployments = () => {
       </ul>
     </main>
   );
+};
+
+const start = function (sqlite3) {
+  console.log("Running SQLite3 version", sqlite3.version.libVersion);
+  const db = new sqlite3.oo1.DB("/mydb.sqlite3", "ct");
+  try {
+    console.log("Creating a table...");
+    db.exec("CREATE TABLE IF NOT EXISTS t(a,b)");
+    console.log("Insert some data using exec()...");
+    for (let i = 20; i <= 25; ++i) {
+      db.exec({
+        sql: "INSERT INTO t(a,b) VALUES (?,?)",
+        bind: [i, i * 2],
+      });
+    }
+    console.log("Query data with exec()...");
+    db.exec({
+      sql: "SELECT a FROM t ORDER BY a LIMIT 3",
+      callback: (row) => {
+        console.log(row);
+      },
+    });
+  } finally {
+    db.close();
+  }
 };

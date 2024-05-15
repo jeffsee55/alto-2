@@ -1,0 +1,13 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1715721144650,
+      "tag": "0000_lyrical_ender_wiggin",
+      "breakpoints": true
+    }
+  ]
+}

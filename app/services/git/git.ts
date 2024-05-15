@@ -4,13 +4,10 @@ import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not, sql } from "drizzle-orm";
 import * as git from "isomorphic-git";
-import * as http from "isomorphic-git/http/node";
-import fs from "fs";
-import { exec } from "child_process";
 import { sep, parse as pathParse } from "path";
-import crypto from "crypto";
-import tmp from "tmp-promise";
 import diff3Merge from "diff3";
+import { GitServer } from "./git.server";
+import { Buffer } from "buffer";
 
 type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
@@ -320,28 +317,11 @@ export class GitExec {
     return args.tree;
   }
 
-  async getCommitForBranch(args: { branch: string }) {
-    const commitOid = await git.resolveRef({
-      fs,
-      dir: this.dir,
-      ref: args.branch,
-    });
-
-    if (typeof commitOid !== "string") {
-      throw new Error(`Expected commit oid to be a string, got ${commitOid}`);
-    }
-
-    const commit = await git.readCommit({
-      fs,
-      dir: this.dir,
-      oid: commitOid,
-    });
-    return commit;
-  }
   async buildCommitTree(args: { branch: string }): Promise<TreeType> {
     const ref = args.branch;
-    const lsTree = await this._lsTree({ ref });
-    const commitInfo = await this.getCommitForBranch({
+    const lsTree = await GitServer._lsTree({ dir: this.dir, ref });
+    const commitInfo = await GitServer.getCommitForBranch({
+      dir: this.dir,
       branch: ref,
     });
 
@@ -410,7 +390,7 @@ export class GitExec {
       Buffer.from([0]),
       buffer,
     ]);
-    return crypto.createHash("sha1").update(wrapped).digest("hex");
+    return GitServer.hash(wrapped);
   }
 
   static buildTreeHash(args: { tree: TreeType; dir: string }) {
@@ -450,7 +430,7 @@ export class GitExec {
         Buffer.from([0]),
         buffer,
       ]);
-      const result2 = crypto.createHash("sha1").update(wrapped).digest("hex");
+      const result2 = GitServer.hash(wrapped);
       // Uncomment to check against the isomorphic-git implementation
       // const isoResult = await git.writeTree({
       //   fs,
@@ -473,92 +453,11 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
-    const real = false;
-    if (real) {
-      const tmpDir = tmp.dirSync({ unsafeCleanup: true });
-      console.log("cloning into...", tmpDir.name);
-
-      // Example curl command for reference
-      // curl -I \
-      // -H "Accept: application/vnd.github+json" \
-      // -H "Authorization: Bearer github_pat_123" \
-      // -H "X-GitHub-Api-Version: 2022-11-28" \
-      // https://raw.githubusercontent.com/jeffsee55/movie-content-private/main/assets/image-a.avif
-
-      try {
-        const token = "some-token";
-        await git.clone({
-          fs,
-          dir: tmpDir.name,
-          http: http,
-          depth: 1,
-          ref: args.branchName,
-          // This isn't how the documentation reads but found this here
-          // https://github.com/isomorphic-git/isomorphic-git/issues/1722#issuecomment-1783339875
-          url: `https://${token}:@github.com/jeffsee55/movie-content-private`,
-        });
-      } catch (e) {
-        console.log(e);
-      }
-
-      const dir = await fs.promises.readdir(tmpDir.name);
-      this.dir = tmpDir.name;
-      console.log("tempdir contents", dir);
-    }
-    // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
-    const commitInfo = await this.getCommitForBranch({
-      branch: args.branchName,
-    });
-
-    const cloneResult = {
-      branchName: args.branchName,
-      commit: {
-        parents: commitInfo.commit.parent,
-        content: commitInfo.commit.message,
-        oid: commitInfo.oid,
-      },
-    };
-    return cloneResult;
-  }
-
-  async _lsTree({ ref }: { ref: string }) {
-    return new Promise((resolve, reject) => {
-      exec(
-        `git ls-tree ${ref} -r -t`,
-        { cwd: this.dir, maxBuffer: 1024 * 5000 },
-        async (error, stdout, stderr) => {
-          if (error) {
-            reject(`Error listing branches: ${error}`);
-            return;
-          }
-          if (stderr) {
-            reject(`Git stderr: ${stderr}`);
-            return;
-          }
-          resolve(stdout);
-        }
-      );
-    });
+    return GitServer.clone({ dir: this.dir, branchName: args.branchName });
   }
 
   async readBlob(oid: string) {
-    // Skipping unnecessary sha lookup
-    // this is extremely fast when the objects are coming from a
-    // pack file because the cache holds them in memory
-    const res = await git.readObject({
-      fs,
-      dir: this.dir,
-      oid,
-      cache: this.cache,
-    });
-    if (!res) {
-      throw new Error(`Unable to read blob with oid ${oid}`);
-    }
-    if (res.object instanceof Uint8Array) {
-      return Buffer.from(res.object).toString("utf8");
-    } else {
-      throw new Error(`Unknown error occurred while reading blob ${res.oid}.`);
-    }
+    return GitServer.readBlob(this.dir, oid);
   }
 }
 
@@ -1341,7 +1240,7 @@ export class Commit {
 // at some scale it might make sense to omit `mode` and `oid`
 // since mode can be inferred and oid is likely being changed
 // depending on what type of operation is being performed
-type TreeType = {
+export type TreeType = {
   type: "tree";
   mode: "040000";
   name: string;
@@ -1427,6 +1326,9 @@ export function mergeFile({
   const base = baseContent.match(LINEBREAKS);
   const theirs = theirContent.match(LINEBREAKS);
 
+  if (!ours || !base || !theirs) {
+    throw new Error("Unable to determine content of files for merge");
+  }
   // Here we let the diff3 library do the heavy lifting.
   const result = diff3Merge(ours, base, theirs);
 

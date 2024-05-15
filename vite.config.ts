@@ -18,4 +18,13 @@ export default defineConfig({
     include: ["**/*.{test,spec}.?(c|m)[jt]s?(x)"],
     setupFiles: ["dotenv/config"], // load .env file
   },
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
+  optimizeDeps: {
+    exclude: ["@sqlite.org/sqlite-wasm", "sqlocal"],
+  },
 });
