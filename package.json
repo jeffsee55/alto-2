@@ -25,6 +25,8 @@
     "@remix-run/react": "^2.8.1",
     "@remix-run/serve": "^2.8.1",
     "@sqlite.org/sqlite-wasm": "3.45.3-build2",
+    "@trpc/client": "11.0.0-rc.370",
+    "@trpc/server": "11.0.0-rc.370",
     "@types/diff3": "^0.0.2",
     "@vercel/remix": "^2.9.1",
     "async-lock": "^1.1.0",

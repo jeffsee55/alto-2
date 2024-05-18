@@ -1,25 +1,39 @@
 import React from "react";
 import { SQLocalDrizzle } from "sqlocal/drizzle";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { schema } from "~/services/git/schema";
+import { schema, tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
+import { trpc } from "./trpc-client";
+import clsx from "clsx";
+import { Link } from "@remix-run/react";
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
 export const db = drizzle(driver, { schema });
 
-export default function Database() {
-  React.useEffect(() => {
-    const run = async () => {
-      const setup = async () => {
-        await db.run(sql`DROP TABLE IF EXISTS blobs`);
-        await db.run(sql`DROP TABLE IF EXISTS blobs_to_branches`);
-        await db.run(sql`DROP TABLE IF EXISTS branches`);
-        await db.run(sql`DROP TABLE IF EXISTS commits`);
-        await db.run(sql`DROP TABLE IF EXISTS repos`);
-        await db.run(sql`DROP TABLE IF EXISTS __drizzle_migrations`);
+const checkDatabaseExists = async () => {
+  let exists = true;
+  for await (const table of Object.values(tables)) {
+    try {
+      await db.run(sql`SELECT * FROM ${table} LIMIT 1`);
+    } catch (e) {
+      // console.log(e);
+      exists = false;
+      break;
+    }
+  }
+  return exists;
+};
 
-        await db.run(sql`CREATE TABLE 'blobs' (
+const setup = async () => {
+  await db.run(sql`DROP TABLE IF EXISTS blobs`);
+  await db.run(sql`DROP TABLE IF EXISTS blobs_to_branches`);
+  await db.run(sql`DROP TABLE IF EXISTS branches`);
+  await db.run(sql`DROP TABLE IF EXISTS commits`);
+  await db.run(sql`DROP TABLE IF EXISTS repos`);
+  await db.run(sql`DROP TABLE IF EXISTS __drizzle_migrations`);
+
+  await db.run(sql`CREATE TABLE 'blobs' (
         'oid' text PRIMARY KEY NOT NULL,
         'content' text NOT NULL
       );
@@ -54,26 +68,195 @@ export default function Database() {
         PRIMARY KEY('org_name', 'repo_name')
       );
       `);
-      };
-      let needsSetup = false;
+};
+
+const importDump = async () => {
+  const list2 = await trpc.dump.query();
+  for await (const table of Object.values(tables)) {
+    await db.delete(table).run();
+  }
+
+  for await (const [tableName, table] of Object.entries(tables)) {
+    await db.delete(table).run();
+    const items = list2[tableName];
+    for await (const item of items) {
       try {
-        await db.query.repos.findFirst();
+        await db.insert(table).values(item);
       } catch (e) {
-        needsSetup = true;
+        console.log(`failed`, item);
+        console.log(item);
       }
-      if (needsSetup) {
-        await setup();
+    }
+  }
+};
+
+export default function Database() {
+  const [dbExists, setDbExists] = React.useState(false);
+  const [repos, setRepos] = React.useState<
+    Awaited<ReturnType<typeof populateRepos>>
+  >([]);
+
+  React.useEffect(() => {
+    const run = async () => {
+      const exists = await checkDatabaseExists();
+      if (exists) {
+        await populateRepos();
       }
-      try {
-        await db
-          .insert(schema.repos)
-          .values({ orgName: "jeffsee55", repoName: "drizzle-orm" });
-      } catch (e) {}
-      const repo = await db.query.repos.findFirst();
-      console.log(repo);
+      setDbExists(exists);
     };
     run();
   }, []);
 
-  return <div>Hi From database</div>;
+  const populateRepos = async () => {
+    const res = await db.query.repos.findMany({
+      with: {
+        branches: { with: { blobsToBranches: { columns: { blobOid: true } } } },
+      },
+    });
+    console.log(res);
+    setRepos(res);
+    return res;
+  };
+
+  return (
+    <div>
+      <ul>
+        {/* <li>Database check {dbExists ? "Exists" : "Not exists"}</li> */}
+        {/* Heading */}
+        {dbExists ? null : (
+          <div className="sm:rounded-lg bg-gray-700/10 mb-8">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-base font-semibold leading-6 text-gray-100">
+                Database not found
+              </h3>
+              <div className="mt-2 max-w-xl text-sm text-gray-200">
+                <p>
+                  The database has not yet been initialized. Click the button
+                </p>
+              </div>
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await setup();
+                    await checkDatabaseExists();
+                  }}
+                  className="inline-flex items-center rounded-md bg-gray-500/10 px-3 py-2 text-sm font-semibold text-gray-100 shadow-sm ring-1 ring-inset ring-gray-700 hover:bg-gray-70"
+                >
+                  Initialize
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {repos.length === 0 ? (
+          <div className="sm:rounded-lg bg-gray-700/10 mb-8">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-base font-semibold leading-6 text-gray-100">
+                No repos found
+              </h3>
+              <div className="mt-2 max-w-xl text-sm text-gray-200">
+                <p>Run the database dump to import all repos from the server</p>
+              </div>
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // await setup();
+                    // await checkDatabaseExists();
+                    await importDump();
+                    await populateRepos();
+                  }}
+                  className="inline-flex items-center rounded-md bg-gray-500/10 px-3 py-2 text-sm font-semibold text-gray-100 shadow-sm ring-1 ring-inset ring-gray-700 hover:bg-gray-70"
+                >
+                  Initialize
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          repos.map((repo) => {
+            let totalBlobs = 0;
+            repo.branches.forEach((branch) => {
+              totalBlobs += branch.blobsToBranches.length;
+            });
+            const mainBranch = repo.branches.find(
+              (b) => b.branchName === "main"
+            );
+            const stats = [
+              { name: "Branches", value: repo.branches.length },
+              { name: "Total blobs", value: totalBlobs },
+              {
+                name: "Latest commit",
+                value: mainBranch?.commitOid.slice(0, 6),
+              },
+              { name: "Schema", value: "n/a" },
+            ];
+
+            return (
+              <div key={repo.repoName}>
+                <div className="sm:rounded-lg flex flex-col items-start justify-between gap-x-8 gap-y-4 bg-gray-700/10 px-4 py-4 sm:flex-row sm:items-center sm:px-6 lg:px-8">
+                  <div>
+                    <div className="flex items-center gap-x-3">
+                      <div className="flex-none rounded-full bg-green-400/10 p-1 text-green-400">
+                        <div className="h-2 w-2 rounded-full bg-current" />
+                      </div>
+                      <h1 className="flex gap-x-3 text-base leading-7">
+                        <span className="font-semibold text-white">
+                          {repo.orgName}
+                        </span>
+                        <span className="text-gray-600">/</span>
+                        <span className="font-semibold text-white">
+                          {repo.repoName}
+                        </span>
+                      </h1>
+                    </div>
+                    <p className="mt-2 text-xs leading-6 text-gray-400">
+                      Deploys from GitHub via main branch
+                    </p>
+                  </div>
+                  <Link
+                    to={`/repos/${repo.orgName}/${repo.repoName}`}
+                    className="block rounded-md bg-gray-700/10 px-2.5 py-1.5 text-sm font-semibold text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-700"
+                  >
+                    Visit
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 bg-gray-700/10 sm:grid-cols-2 lg:grid-cols-4">
+                  {stats.map((stat, statIdx) => (
+                    <div
+                      key={stat.name}
+                      className={clsx(
+                        statIdx % 2 === 1
+                          ? "sm:border-l"
+                          : statIdx === 2
+                          ? "lg:border-l"
+                          : "",
+                        "border-t border-white/5 py-6 px-4 sm:px-6 lg:px-8"
+                      )}
+                    >
+                      <p className="text-sm font-medium leading-6 text-gray-400">
+                        {stat.name}
+                      </p>
+                      <p className="mt-2 flex items-baseline gap-x-2">
+                        <span className="text-4xl font-semibold tracking-tight text-white">
+                          {stat.value}
+                        </span>
+                        {stat.unit ? (
+                          <span className="text-sm text-gray-400">
+                            {stat.unit}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </ul>
+    </div>
+  );
 }

@@ -20,6 +20,12 @@ dependencies:
   '@sqlite.org/sqlite-wasm':
     specifier: 3.45.3-build2
     version: 3.45.3-build2
+  '@trpc/client':
+    specifier: 11.0.0-rc.370
+    version: 11.0.0-rc.370(@trpc/server@11.0.0-rc.370)
+  '@trpc/server':
+    specifier: 11.0.0-rc.370
+    version: 11.0.0-rc.370
   '@types/diff3':
     specifier: ^0.0.2
     version: 0.0.2
@@ -1907,6 +1913,18 @@ packages:
   /@sqlite.org/sqlite-wasm@3.45.3-build2:
     resolution: {integrity: sha512-KFcakpnjodQT89x90BtGOYq6BOW5rIQ4Rm38Q3rX+qE8Gu5SeBaRgLR5t9vHdQ+uA5a2DawYtlxmotI5el2dhQ==}
     hasBin: true
+    dev: false
+
+  /@trpc/client@11.0.0-rc.370(@trpc/server@11.0.0-rc.370):
+    resolution: {integrity: sha512-3s3NuJ1wwIod96a2BEXwmCacROfeMnUOhBa9pi/ksQzrr0KkFXeJWsLcHwL8XmZRZ93scPLnX7I7jGTW2ol68w==}
+    peerDependencies:
+      '@trpc/server': 11.0.0-rc.370+1a920ac81
+    dependencies:
+      '@trpc/server': 11.0.0-rc.370
+    dev: false
+
+  /@trpc/server@11.0.0-rc.370:
+    resolution: {integrity: sha512-wmAujmM8C21UgSk408436OolK5iOKgLUkMvp1LjON++MRNmZYmFb6JmnjPHn0K9wX0V0qMlME2NGb7v8uTB3lw==}
     dev: false
 
   /@ts-morph/common@0.11.1:

@@ -8,7 +8,7 @@ import {
   SearchIcon,
 } from "lucide-react";
 import { Repo, movieRepoPath, movieRepoConfig } from "~/services/git/git";
-import { Link, useLoaderData } from "@remix-run/react";
+import { Link } from "@remix-run/react";
 import { loadDatabase } from "~/services/git/database";
 import React from "react";
 
@@ -45,8 +45,6 @@ export async function loader() {
 const Database = React.lazy(() => import("~/components/db"));
 
 export default function Index() {
-  const data = useLoaderData<typeof loader>();
-
   const [isBrowser, setIsBrowser] = React.useState(false);
 
   React.useEffect(() => {
@@ -58,117 +56,35 @@ export default function Index() {
   }
 
   return (
-    <div className="h-screen w-screen bg-zinc-900 text-white flex flex-col">
-      <div className="h-16 w-full border-b border-zinc-800 flex justify-between items-center">
-        <div className="w-20 h-16 flex items-center border-r border-zinc-800">
-          <div className="py-2 px-4 font-display text-2xl font-bold">Alto</div>
+    <div className="w-full flex-1 flex">
+      <div className="pt-24 pb-12 mx-auto">
+        <div className="text-4xl mb-24">
+          <span className="font-display font-light">Good morning, </span>
+          <span className="font-display font-black">Alto</span>
         </div>
-        <Database />
-        <div className="flex w-96">
-          <label htmlFor="search-field" className="sr-only">
-            Search
-          </label>
-          <div className="relative w-full">
-            <SearchIcon
-              className="absolute left-2 top-3 h-4 w-4 text-gray-600"
-              aria-hidden="true"
-            />
-            <input
-              id="search-field"
-              className="flex h-10 w-full rounded-md border border-zinc-800 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pl-8"
-              placeholder="Search..."
-              type="search"
-              name="search"
-            />
-          </div>
-        </div>
-        <div />
-      </div>
-      <div className="flex flex-1 overflow-scroll">
-        <div className="w-20 border-r border-zinc-800 flex flex-col justify-between items-center">
-          <div />
-          <div>
-            <ul className="flex flex-col gap-y-2">
-              <li>
-                <Link
-                  to={"#"}
-                  className={clsx(
-                    // eslint-disable-next-line no-constant-condition
-                    false
-                      ? "bg-zinc-900 text-white"
-                      : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
-                    "group flex gap-x-3 rounded-md p-3 text-sm leading-6 font-semibold"
-                  )}
-                >
-                  <HomeIcon className="h-5 w-5" strokeWidth={1.25} />
-                  <span className="sr-only">Home</span>
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={"#"}
-                  className={clsx(
-                    // eslint-disable-next-line no-constant-condition
-                    false
-                      ? "bg-zinc-900 text-white"
-                      : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
-                    "group flex gap-x-3 rounded-md p-3 text-sm leading-6 font-semibold"
-                  )}
-                >
-                  <GitBranchIcon className="h-5 w-5" strokeWidth={1.25} />
-                  <span className="sr-only">Changes</span>
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={"#"}
-                  className={clsx(
-                    // eslint-disable-next-line no-constant-condition
-                    false
-                      ? "bg-zinc-900 text-white"
-                      : "text-gray-400 hover:text-gray-200 hover:bg-zinc-900",
-                    "group flex gap-x-3 rounded-md p-3 text-sm leading-6 font-semibold"
-                  )}
-                >
-                  <BoltIcon className="h-5 w-5" strokeWidth={1.25} />
-                  <span className="sr-only">Settings</span>
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>F</div>
-        </div>
-        <div className="w-full flex-1 flex">
-          <div className="pt-24 pb-12 mx-auto">
-            <div className="text-4xl mb-24">
-              <span className="font-display font-light">Good morning, </span>
-              <span className="font-display font-black">Alto</span>
-            </div>
-            <div className="w-full flex gap-20">
-              <div className="inline-flex flex-col gap-3">
-                <div className="flex w-full justify-between items-center">
-                  <div className="text-lg">
-                    <span className="font-display font-semibold">
-                      Active Changesets
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <Link to="#" className="font-display font-semibold">
-                      View All{" "}
-                      <span className="pl-2" aria-hidden="true">
-                        →
-                      </span>
-                    </Link>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col overflow-hidden"></div>
-                  <div className="w-64 h-96 rounded-lg bg-[#453d4c]"></div>
-                </div>
+        <div className="w-full flex gap-20">
+          <div className="inline-flex flex-col gap-3">
+            <div className="flex w-full justify-between items-center">
+              <div className="text-lg">
+                <span className="font-display font-semibold">
+                  Active Changesets
+                </span>
               </div>
-              <Deployments />
+              <div className="text-sm">
+                <Link to="#" className="font-display font-semibold">
+                  View All{" "}
+                  <span className="pl-2" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="w-64 h-96 rounded-lg bg-[#56514d] flex flex-col overflow-hidden"></div>
+              <div className="w-64 h-96 rounded-lg bg-[#453d4c]"></div>
             </div>
           </div>
+          <Deployments />
         </div>
       </div>
     </div>
@@ -270,29 +186,4 @@ const Deployments = () => {
       </ul>
     </main>
   );
-};
-
-const start = function (sqlite3) {
-  console.log("Running SQLite3 version", sqlite3.version.libVersion);
-  const db = new sqlite3.oo1.DB("/mydb.sqlite3", "ct");
-  try {
-    console.log("Creating a table...");
-    db.exec("CREATE TABLE IF NOT EXISTS t(a,b)");
-    console.log("Insert some data using exec()...");
-    for (let i = 20; i <= 25; ++i) {
-      db.exec({
-        sql: "INSERT INTO t(a,b) VALUES (?,?)",
-        bind: [i, i * 2],
-      });
-    }
-    console.log("Query data with exec()...");
-    db.exec({
-      sql: "SELECT a FROM t ORDER BY a LIMIT 3",
-      callback: (row) => {
-        console.log(row);
-      },
-    });
-  } finally {
-    db.close();
-  }
 };

@@ -3,7 +3,7 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not, sql } from "drizzle-orm";
-import * as git from "isomorphic-git";
+import { hashBlob } from "isomorphic-git";
 import { sep, parse as pathParse } from "path";
 import diff3Merge from "diff3";
 import { GitServer } from "./git.server";
@@ -42,7 +42,7 @@ export class GitExec {
   }
 
   static async hashBlob(content: string) {
-    const { oid } = await git.hashBlob({
+    const { oid } = await hashBlob({
       object: content,
     });
     return oid;
@@ -317,64 +317,6 @@ export class GitExec {
     return args.tree;
   }
 
-  async buildCommitTree(args: { branch: string }): Promise<TreeType> {
-    const ref = args.branch;
-    const lsTree = await GitServer._lsTree({ dir: this.dir, ref });
-    const commitInfo = await GitServer.getCommitForBranch({
-      dir: this.dir,
-      branch: ref,
-    });
-
-    if (typeof lsTree === "string") {
-      const lines = lsTree.split("\n");
-
-      const tree: TreeType = {
-        type: "tree",
-        mode: "040000",
-        oid: commitInfo.commit.tree,
-        name: ".",
-        entries: {},
-      };
-
-      lines.forEach((lineString) => {
-        const [, type, oidAndPath] = lineString.split(" ");
-        if (oidAndPath) {
-          const [oid, filepath] = oidAndPath.split("\t");
-          const pathParts = filepath.split(sep);
-          const lastPart = pathParts[pathParts.length - 1];
-          let currentTree = tree.entries;
-          pathParts.forEach((part, i) => {
-            if (i === pathParts.length - 1) {
-              if (type === "tree") {
-                currentTree[part] = {
-                  type: "tree",
-                  mode: "040000",
-                  oid,
-                  name: lastPart,
-                  entries: {},
-                };
-              } else {
-                currentTree[part] = {
-                  type: "blob",
-                  mode: "100644",
-                  oid,
-                  name: lastPart,
-                };
-              }
-            } else {
-              const next = currentTree[part];
-              if (next.type === "tree") {
-                currentTree = next.entries;
-              }
-            }
-          });
-        }
-      });
-      return tree;
-    } else {
-      throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
-    }
-  }
   buildTreeHash(args: { tree: TreeType }) {
     return GitExec.buildTreeHash({
       ...args,
@@ -529,7 +471,7 @@ export class Repo {
     const gitExec = this.gitExec;
     const cloneResult = await gitExec.clone({ branchName: args.branchName });
 
-    const firstCommit = await this.findOrCreateCommit(cloneResult);
+    const firstCommit = await this.createCommit(cloneResult);
     await this.findOrCreateBranch({
       branchName: args.branchName,
       commitOid: await firstCommit.oid,
@@ -615,18 +557,9 @@ export class Repo {
     return branch;
   }
 
-  async findOrCreateCommit(args: {
-    branchName: string;
-    commit: { parents: string[]; content: string; oid: string };
-  }) {
-    return await this.createCommit({
-      branchName: args.branchName,
-      commit: args.commit,
-    });
-  }
-
   async createCommit(args: {
     branchName: string;
+    tree: TreeType;
     commit: { parents: string[]; content: string; oid: string };
   }) {
     const commit = new Commit({
@@ -635,9 +568,7 @@ export class Repo {
       orgName: this.orgName,
       ...args.commit,
       message: args.commit.content,
-      tree: await this.gitExec.buildCommitTree({
-        branch: args.branchName,
-      }),
+      tree: args.tree,
       gitExec: this.gitExec,
     });
     const exists = false;
