@@ -8,7 +8,9 @@ import clsx from "clsx";
 import { Link } from "@remix-run/react";
 
 // Initialize Drizzle with SQLocal driver
-const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
+const { driver, getDatabaseFile } = new SQLocalDrizzle(
+  "migrations-test.sqlite3"
+);
 export const db = drizzle(driver, { schema });
 
 const checkDatabaseExists = async () => {
@@ -120,6 +122,26 @@ export default function Database() {
 
   return (
     <div>
+      <button
+        type="button"
+        onClick={async () => {
+          // Drop this into https://sqlite.drizzle.studio/
+          const databaseFile = await getDatabaseFile();
+          const fileUrl = URL.createObjectURL(databaseFile);
+          console.log(fileUrl);
+
+          const a = document.createElement("a");
+          a.href = fileUrl;
+          a.download = "database.sqlite3";
+          a.click();
+          a.remove();
+
+          URL.revokeObjectURL(fileUrl);
+        }}
+        className="mb-4 rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+      >
+        Download SQLite file
+      </button>
       <ul>
         {/* <li>Database check {dbExists ? "Exists" : "Not exists"}</li> */}
         {/* Heading */}
@@ -215,12 +237,20 @@ export default function Database() {
                       Deploys from GitHub via main branch
                     </p>
                   </div>
-                  <Link
-                    to={`/repos/${repo.orgName}/${repo.repoName}`}
-                    className="block rounded-md bg-gray-700/10 px-2.5 py-1.5 text-sm font-semibold text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-700"
-                  >
-                    Visit
-                  </Link>
+                  <div className="flex gap-2 items-center">
+                    <button
+                      onClick={() => importDump()}
+                      className="block rounded-md bg-gray-700/10 px-2.5 py-1.5 text-sm font-semibold text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-700"
+                    >
+                      Reimport
+                    </button>
+                    <Link
+                      to={`/repos/${repo.orgName}/${repo.repoName}`}
+                      className="block rounded-md bg-gray-700/10 px-2.5 py-1.5 text-sm font-semibold text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-700"
+                    >
+                      Visit
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 bg-gray-700/10 sm:grid-cols-2 lg:grid-cols-4">

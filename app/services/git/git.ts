@@ -268,6 +268,7 @@ export class GitExec {
             type: "blob",
             mode: "100644",
             oid: args.blobOid,
+            path: args.path,
             name: part,
           };
         } else {
@@ -275,6 +276,7 @@ export class GitExec {
             type: "tree",
             mode: "040000",
             oid: "replace-me", // it probably makes sense to only populate the oid (and mode) when we're building the commit hash
+            path: args.path,
             name: part,
             entries: {},
           };
@@ -292,6 +294,7 @@ export class GitExec {
           type: "blob",
           mode: "100644",
           oid: args.blobOid,
+          path: args.path,
           name: part,
         };
       } else {
@@ -1175,6 +1178,7 @@ export type TreeType = {
   type: "tree";
   mode: "040000";
   name: string;
+  path: string;
   oid: string;
   entries: Record<string, TreeType | BlobType>;
 };
@@ -1183,6 +1187,7 @@ type BlobType = {
   mode: "100644";
   oid: string;
   name: string;
+  path: string;
 };
 
 const createSortableDirectoryPath = (path: string) => {

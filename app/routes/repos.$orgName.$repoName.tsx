@@ -1,5 +1,6 @@
 import React from "react";
 import { HeadersFunction } from "@vercel/remix";
+import { Outlet } from "@remix-run/react";
 
 export const headers: HeadersFunction = () => ({
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -19,16 +20,5 @@ export default function Page() {
     return null;
   }
 
-  return (
-    <div className="w-full flex-1 flex">
-      <div className="pt-24 pb-12 mx-auto">
-        <div className="text-4xl mb-24"></div>
-        <div className="w-full flex gap-20">
-          <div className="inline-flex flex-col gap-3">
-            {isBrowser && <Database />}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <Outlet />;
 }

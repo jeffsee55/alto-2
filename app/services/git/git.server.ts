@@ -50,6 +50,7 @@ export class GitServer {
         mode: "040000",
         oid: commitInfo.commit.tree,
         name: ".",
+        path: ".",
         entries: {},
       };
 
@@ -68,6 +69,7 @@ export class GitServer {
                   mode: "040000",
                   oid,
                   name: lastPart,
+                  path: filepath,
                   entries: {},
                 };
               } else {
@@ -76,6 +78,7 @@ export class GitServer {
                   mode: "100644",
                   oid,
                   name: lastPart,
+                  path: filepath,
                 };
               }
             } else {
