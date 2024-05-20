@@ -1,6 +1,7 @@
 import React from "react";
 import { HeadersFunction } from "@vercel/remix";
-import { useLoaderData } from "@remix-run/react";
+import { ClientLoaderFunctionArgs, useLoaderData } from "@remix-run/react";
+import { z } from "zod";
 
 export const headers: HeadersFunction = () => ({
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -9,8 +10,8 @@ export const headers: HeadersFunction = () => ({
 
 const Files = React.lazy(() => import("~/components/files"));
 
-export const clientLoader = async (p) => {
-  const path = p.params["*"];
+export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
+  const path = z.string().parse(args.params["*"]);
   const db = await import("../components/repo").then((mod) => mod.db);
   const data = await db.query.blobsToBranches.findFirst({
     where(fields, operators) {

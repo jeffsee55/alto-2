@@ -1,9 +1,12 @@
-import { TreeType } from "./git";
+import { GitBase } from "./git.interface";
+import { Buffer } from "buffer";
+import type { TreeType } from "./types";
+import type { ReadCommitResult } from "isomorphic-git";
 
-export class GitBrowser {
-  static async hash(str: any) {
+export class GitBrowser extends GitBase {
+  async hash(buffer: Buffer) {
     const encoder = new TextEncoder();
-    const data = encoder.encode(str);
+    const data = encoder.encode(buffer.toString());
 
     // Use the SubtleCrypto API to hash the data
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -14,19 +17,46 @@ export class GitBrowser {
     return hashHex;
   }
 
-  static async readBlob(dir: string, oid: string) {
-    return "fake blob";
+  async hashBlob(string: string) {
+    return this.hash(Buffer.from(string));
   }
 
-  static async _buildCommitTree(args: {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async readBlob(dir: string, oid: string): Promise<string> {
+    throw new Error(`GitBrowser.readBlob not implemented`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async _buildCommitTree(args: {
     dir: string;
     branch: string;
   }): Promise<TreeType> {
-    return {};
+    throw new Error(`GitBrowser._buildCommitTree not implemented`);
   }
 
-  static async _lsTree({ dir, ref }: { dir: string; ref: string }) {}
-  static async _getCommitForBranch(args: { dir: string; branch: string }) {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async _lsTree({ dir, ref }: { dir: string; ref: string }): Promise<string> {
+    throw new Error(`GitBrowser._lsTree not implemented`);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async _getCommitForBranch(args: {
+    dir: string;
+    branch: string;
+  }): Promise<ReadCommitResult> {
+    throw new Error(`GitBrowser._getCommitForBranch not implemented`);
+  }
 
-  static async clone(args: { dir: string; branchName: string }) {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async clone(args: { dir: string; branchName: string }): Promise<{
+    branchName: string;
+    dir: string;
+    tree: TreeType;
+    commit: {
+      parents: string[];
+      content: string;
+      oid: string;
+    };
+  }> {
+    throw new Error(`GitBrowser.clone not implemented`);
+  }
 }

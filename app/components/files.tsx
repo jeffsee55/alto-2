@@ -5,10 +5,11 @@ import { schema, tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
-import { type TreeType } from "~/services/git/git";
-import { Branch, GitExec } from "~/services/git/git2";
+import type { TreeType } from "~/services/git/types";
+import { Branch, GitExec } from "~/services/git/git";
 import { Link } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
+import { GitBrowser } from "~/services/git/git.browser";
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
@@ -155,6 +156,7 @@ const Main = (props) => {
               db: db,
               orgName: "jeffsee55",
               repoName: "movie-content",
+              exec: new GitBrowser(),
               dir: "/Users/jeffsee/code/movie-content",
             });
             const branch = Branch.fromRecord({
