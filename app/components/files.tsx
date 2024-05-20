@@ -6,11 +6,8 @@ import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
 import type { TreeType } from "~/services/git/types";
-import { Branch, GitExec } from "~/services/git/git";
-import { Link, useParams, useSubmit } from "@remix-run/react";
+import { Form, Link, useParams, useSubmit } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
-import { GitBrowser } from "~/services/git/git.browser";
-import { z } from "zod";
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
@@ -134,52 +131,30 @@ const Main = (props) => {
         />
       </div>
       <div className="w-72 p-6">
-        <div className="mb-4">
-          <div className="px-4 sm:px-0">
-            <h3 className="text-base font-semibold leading-7 text-gray-100">
-              {props.path}
-            </h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-200">
-              {currentOid.slice(0, 7)}
-            </p>
+        <Form method="post" action={window.location.pathname}>
+          <div className="mb-4">
+            <div className="px-4 sm:px-0">
+              <h3 className="text-base font-semibold leading-7 text-gray-100">
+                {props.path}
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-200">
+                {currentOid.slice(0, 7)}
+              </p>
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={async () => {
-            const gitExec = new GitExec({
-              db: db,
-              orgName: "jeffsee55",
-              repoName: "movie-content",
-              exec: new GitBrowser(),
-              remoteSource: "/Users/jeffsee/code/movie-content",
-            });
-            const branch = Branch.fromRecord({
-              db: db,
-              orgName: "jeffsee55",
-              gitExec,
-              branchName: "main",
-              repoName: "movie-content",
-              commitOid: "",
-            });
-            const path = z.string().parse(params["*"]);
-            submit(
-              { myKey: "myValue" },
-              { method: "post", action: window.location.pathname }
-            );
-
-            await branch.upsert({
-              path,
-              content: currentContent,
-            });
-            // const res = await branch.find({
-            //   path,
-            // });
-          }}
-          className="w-full rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-        >
-          Save
-        </button>
+          <input type="hidden" value={currentContent} name="content" />
+          <button
+            type="submit"
+            // onClick={async () => {
+            //   // const res = await branch.find({
+            //   //   path,
+            //   // });
+            // }}
+            className="w-full rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+          >
+            Save
+          </button>
+        </Form>
       </div>
     </div>
   );
