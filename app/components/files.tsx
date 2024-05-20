@@ -5,7 +5,8 @@ import { schema, tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
-import { TreeType } from "~/services/git/git";
+import { type TreeType } from "~/services/git/git";
+import { Branch, GitExec } from "~/services/git/git2";
 import { Link } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
 
@@ -61,6 +62,9 @@ const Main = (props) => {
   const [data, setData] = React.useState<TreeType[]>([]);
   const [editorWidth, setEditorWidth] = React.useState(0);
   const [currentOid, setCurrentOid] = React.useState(props.blob.oid);
+  const [currentContent, setCurrentContent] = React.useState(
+    props.blob.content
+  );
 
   React.useEffect(() => {
     const run = async () => {
@@ -125,6 +129,7 @@ const Main = (props) => {
                 .map((byte) => byte.toString(16).padStart(2, "0"))
                 .join("");
               setCurrentOid(hashHex);
+              setCurrentContent(value);
             };
             hashBlob({ object: value });
           }}
@@ -144,6 +149,30 @@ const Main = (props) => {
         </div>
         <button
           type="button"
+          onClick={async () => {
+            console.log(currentContent);
+            const gitExec = new GitExec({
+              db: db,
+              orgName: "jeffsee55",
+              repoName: "movie-content",
+              dir: "/Users/jeffsee/code/movie-content",
+            });
+            const branch = Branch.fromRecord({
+              db: db,
+              orgName: "jeffsee55",
+              gitExec,
+              branchName: "main",
+              repoName: "movie-content",
+              commitOid: "",
+            });
+            await branch.upsert({
+              path: "content/crew/crew3.md",
+              content: currentContent,
+              oid: currentOid,
+            });
+            // const result = await branch.find({ path: "content/crew/crew3.md" });
+            // console.log(result);
+          }}
           className="w-full rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         >
           Save

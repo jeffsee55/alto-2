@@ -8,6 +8,9 @@ import { vercelPreset } from "@vercel/remix/vite";
 installGlobals();
 
 export default defineConfig({
+  define: {
+    "process.env": {},
+  },
   plugins: [
     remix({
       presets: [vercelPreset()],

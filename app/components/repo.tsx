@@ -3,9 +3,6 @@ import { SQLocalDrizzle } from "sqlocal/drizzle";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { schema, tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
-import { trpc } from "./trpc-client";
-import clsx from "clsx";
-import { Link } from "@remix-run/react";
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");

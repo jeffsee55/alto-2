@@ -1,5 +1,4 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { z } from "zod";
 import { schema, tables } from "./schema";
@@ -10,10 +9,7 @@ import diff3Merge from "diff3";
 import { GitServer } from "./git.server";
 import { Buffer } from "buffer";
 
-type DB =
-  | BetterSQLite3Database<typeof schema>
-  | LibSQLDatabase<typeof schema>
-  | SqliteRemoteDatabase<typeof schema>;
+type DB = BetterSQLite3Database<typeof schema> | LibSQLDatabase<typeof schema>;
 
 export const movieRepoPath = "/Users/jeffsee/code/movie-content";
 // export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";

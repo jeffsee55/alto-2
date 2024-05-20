@@ -115,7 +115,6 @@ export default function Database() {
         branches: { with: { blobsToBranches: { columns: { blobOid: true } } } },
       },
     });
-    console.log(res);
     setRepos(res);
     return res;
   };

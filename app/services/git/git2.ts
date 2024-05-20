@@ -4,10 +4,9 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { z } from "zod";
 import { schema, tables } from "./schema";
 import { SQL, and, eq, not, sql } from "drizzle-orm";
-import { hashBlob } from "isomorphic-git";
 import { sep, parse as pathParse } from "path";
 import diff3Merge from "diff3";
-import { GitServer } from "./git.server";
+import { GitBrowser as GitServer } from "./git.browser";
 import { Buffer } from "buffer";
 
 type DB =
@@ -46,10 +45,16 @@ export class GitExec {
   }
 
   static async hashBlob(content: string) {
-    const { oid } = await hashBlob({
-      object: content,
-    });
-    return oid;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(content);
+
+    // Use the SubtleCrypto API to hash the data
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    return hashHex;
   }
 
   async findBaseCommit(args: { ourCommitOid: string; theirCommitOid: string }) {
@@ -330,7 +335,7 @@ export class GitExec {
       dir: this.dir,
     });
   }
-  buildCommitHash(args: { message: string; treeOid: string }) {
+  async buildCommitHash(args: { message: string; treeOid: string }) {
     const string = `tree ${args.treeOid}\n\n${args.message}`;
     const buffer = Buffer.from(string, "utf8");
     const wrapped = Buffer.concat([
@@ -339,17 +344,17 @@ export class GitExec {
       Buffer.from([0]),
       buffer,
     ]);
-    return GitServer.hash(wrapped);
+    return GitServer.hash(wrapped.toString());
   }
 
-  static buildTreeHash(args: { tree: TreeType; dir: string }) {
+  static async buildTreeHash(args: { tree: TreeType; dir: string }) {
     const tree = args.tree;
-    const buildTree = (tree: TreeType) => {
+    const buildTree = async (tree: TreeType) => {
       const entries: { type: "tree" | "blob"; oid: string; name: string }[] =
         [];
-      for (const [name, entry] of Object.entries(tree.entries)) {
+      for await (const [name, entry] of Object.entries(tree.entries)) {
         if (entry.type === "tree") {
-          const oid = buildTree(entry);
+          const oid = await buildTree(entry);
           entries.push({ type: "tree", oid, name });
         } else {
           entries.push({ type: "blob", oid: entry.oid, name });
@@ -379,7 +384,7 @@ export class GitExec {
         Buffer.from([0]),
         buffer,
       ]);
-      const result2 = GitServer.hash(wrapped);
+      const result2 = GitServer.hash(wrapped.toString());
       // Uncomment to check against the isomorphic-git implementation
       // const isoResult = await git.writeTree({
       //   fs,
@@ -569,12 +574,12 @@ export class Repo {
     tree: TreeType;
     commit: { parents: string[]; content: string; oid: string };
   }) {
-    const commit = new Commit({
+    const commit = await Commit.build({
       db: this.db,
       repoName: this.repoName,
       orgName: this.orgName,
       ...args.commit,
-      message: args.commit.content,
+      content: args.commit.content,
       tree: args.tree,
       gitExec: this.gitExec,
     });
@@ -616,7 +621,6 @@ export class Branch {
     branchName: string;
     orgName: string;
     db: DB;
-
     commitOid: string;
     repoName: string;
     gitExec: GitExec;
@@ -807,10 +811,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
         GitExec.removeFromTree({ tree: currentCommit.tree, path });
       }
 
-      const commit = new Commit({
+      const commit = await Commit.build({
         db: this.db,
         gitExec: this.gitExec,
-        message: `Merged ${this.commitOid} and ${branchToMerge.commitOid}`,
+        content: `Merged ${this.commitOid} and ${branchToMerge.commitOid}`,
         parents: [this.commitOid, branchToMerge.commitOid],
         orgName: this.orgName,
         repoName: this.repoName,
@@ -903,11 +907,11 @@ WHERE ${table.branchName} = ${this.branchName};`;
     const tree = currentCommit.tree;
     GitExec.removeFromTree({ tree, path: args.path });
 
-    const commit = new Commit({
+    const commit = await Commit.build({
       orgName: this.orgName,
       repoName: this.repoName,
       db: this.db,
-      message: `Deleted ${args.path}`,
+      content: `Deleted ${args.path}`,
       tree: tree,
       gitExec: this.gitExec,
       parents: [currentCommit.oid],
@@ -949,11 +953,11 @@ WHERE ${table.branchName} = ${this.branchName};`;
     const tree = currentCommit.tree;
     GitExec.updateTree({ blobOid, tree, path: args.path });
 
-    const commit = new Commit({
+    const commit = await Commit.build({
       orgName: this.orgName,
       repoName: this.repoName,
       db: this.db,
-      message: `Autosave of ${args.path}`,
+      content: `Autosave of ${args.path}`,
       tree: tree,
       gitExec: this.gitExec,
       parents: [currentCommit.oid],
@@ -1102,6 +1106,7 @@ export class Commit {
     orgName: string;
     repoName: string;
     db: DB;
+    oid: string;
     message: string;
     parents?: string[];
 
@@ -1114,35 +1119,52 @@ export class Commit {
     this.content = args.message;
     this.tree = args.tree;
     this.gitExec = args.gitExec;
-    const treeOid = args.gitExec.buildTreeHash({
-      tree: this.tree,
-    });
     this.parents = args.parents;
-    const oid = args.gitExec.buildCommitHash({
-      message: this.content,
-      treeOid,
-    });
-    this.oid = oid;
+    this.oid = args.oid;
   }
 
-  static fromRecord(value: {
+  static async fromRecord(value: {
     repoName: string;
     orgName: string;
     db: DB;
     content: string;
     oid: string;
+    parents?: string[];
     tree: string;
-
     gitExec: GitExec;
   }) {
     const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
-    return new Commit({
+    return Commit.build({
       repoName: value.repoName,
       orgName: value.orgName,
       db: value.db,
-      message: value.content,
+      content: value.content,
+      parents: value.parents,
       tree: tree,
       gitExec: value.gitExec,
+    });
+  }
+
+  static async build(args: {
+    repoName: string;
+    orgName: string;
+    db: DB;
+    parents?: string[];
+    content: string;
+    tree: TreeType;
+    gitExec: GitExec;
+  }) {
+    const treeOid = await args.gitExec.buildTreeHash({
+      tree: args.tree,
+    });
+    const oid = await args.gitExec.buildCommitHash({
+      message: args.content,
+      treeOid,
+    });
+    return new Commit({
+      ...args,
+      message: args.content,
+      oid,
     });
   }
 
