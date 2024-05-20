@@ -3,6 +3,7 @@ import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
 import { Repo, movieRepoPath, movieRepoConfig } from "./git";
 import { loadDatabase } from "./database";
+import { GitServer } from "./git.server";
 
 tmp.setGracefulCleanup();
 
@@ -47,6 +48,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -54,6 +56,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
   });
@@ -69,6 +72,7 @@ describe("clone", async () => {
       db,
       dir: movieRepoPath,
       branchName: "main",
+      exec: new GitServer(),
     });
     // expect no blobs_to_branches to have a path for "content/actors/actor6.md"
 
@@ -77,6 +81,7 @@ describe("clone", async () => {
       db,
       dir: movieRepoPath,
       branchName: "feat-1",
+      exec: new GitServer(),
     });
     // expect blobs_to_branches to have a path for "content/actors/actor6.md"
     // expect to find it on feat-1
@@ -94,6 +99,7 @@ describe("clone", async () => {
       db,
       dir: movieRepoPath,
       branchName: "main",
+      exec: new GitServer(),
     });
 
     const branch = await repo.getBranch({ branchName: "main" });
@@ -214,6 +220,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -250,6 +257,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -279,6 +287,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -308,6 +317,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -336,6 +346,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -378,6 +389,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -414,6 +426,7 @@ describe("clone", async () => {
     const repo = await Repo.clone({
       ...movieRepoConfig,
       db,
+      exec: new GitServer(),
       dir: movieRepoPath,
       branchName: "main",
     });
@@ -454,6 +467,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -486,6 +500,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -523,6 +538,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -558,6 +574,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 
@@ -585,6 +602,7 @@ describe("clone", async () => {
       ...movieRepoConfig,
       db,
       dir: movieRepoPath,
+      exec: new GitServer(),
       branchName: "main",
     });
 

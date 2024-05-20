@@ -8,11 +8,11 @@ import { TreeType } from "./git";
 import { sep } from "path";
 
 export class GitServer {
-  static hash(str: Buffer) {
+  async hash(str: Buffer) {
     return crypto.createHash("sha1").update(str).digest("hex");
   }
 
-  static async readBlob(dir: string, oid: string) {
+  async readBlob(dir: string, oid: string) {
     // Skipping unnecessary sha lookup
     // this is extremely fast when the objects are coming from a
     // pack file because the cache holds them in memory
@@ -31,13 +31,13 @@ export class GitServer {
     }
   }
 
-  static async _buildCommitTree(args: {
+  async _buildCommitTree(args: {
     dir: string;
     branch: string;
   }): Promise<TreeType> {
     const ref = args.branch;
-    const lsTree = await GitServer._lsTree({ dir: args.dir, ref });
-    const commitInfo = await GitServer._getCommitForBranch({
+    const lsTree = await this._lsTree({ dir: args.dir, ref });
+    const commitInfo = await this._getCommitForBranch({
       dir: args.dir,
       branch: ref,
     });
@@ -96,7 +96,7 @@ export class GitServer {
     }
   }
 
-  static async _lsTree({ dir, ref }: { dir: string; ref: string }) {
+  async _lsTree({ dir, ref }: { dir: string; ref: string }) {
     return new Promise((resolve, reject) => {
       exec(
         `git ls-tree ${ref} -r -t`,
@@ -115,7 +115,7 @@ export class GitServer {
       );
     });
   }
-  static async _getCommitForBranch(args: { dir: string; branch: string }) {
+  async _getCommitForBranch(args: { dir: string; branch: string }) {
     const commitOid = await git.resolveRef({
       fs,
       dir: args.dir,
@@ -134,7 +134,7 @@ export class GitServer {
     return commit;
   }
 
-  static async clone(args: { dir: string; branchName: string }) {
+  async clone(args: { dir: string; branchName: string }) {
     let dir = args.dir;
     const real = false;
     if (real) {
@@ -167,12 +167,12 @@ export class GitServer {
       dir = tmpDir.name;
     }
     // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
-    const commitInfo = await GitServer._getCommitForBranch({
+    const commitInfo = await this._getCommitForBranch({
       dir: args.dir,
       branch: args.branchName,
     });
 
-    const tree = await GitServer._buildCommitTree({
+    const tree = await this._buildCommitTree({
       dir: dir,
       branch: args.branchName,
     });
