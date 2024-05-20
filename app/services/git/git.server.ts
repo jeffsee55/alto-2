@@ -1,15 +1,20 @@
 import * as git from "isomorphic-git";
 import * as http from "isomorphic-git/http/node";
 import fs from "fs";
-import { exec } from "child_process";
 import tmp from "tmp-promise";
 import crypto from "crypto";
-import { TreeType } from "./git";
-import { sep } from "path";
+import { exec } from "child_process";
+import { hashBlob } from "isomorphic-git";
+import { GitBase } from "./git.interface";
 
-export class GitServer {
+export class GitServer extends GitBase {
   async hash(str: Buffer) {
     return crypto.createHash("sha1").update(str).digest("hex");
+  }
+
+  async hashBlob(str: string) {
+    const result = await hashBlob({ object: str });
+    return result.oid;
   }
 
   async readBlob(dir: string, oid: string) {
@@ -31,72 +36,7 @@ export class GitServer {
     }
   }
 
-  async _buildCommitTree(args: {
-    dir: string;
-    branch: string;
-  }): Promise<TreeType> {
-    const ref = args.branch;
-    const lsTree = await this._lsTree({ dir: args.dir, ref });
-    const commitInfo = await this._getCommitForBranch({
-      dir: args.dir,
-      branch: ref,
-    });
-
-    if (typeof lsTree === "string") {
-      const lines = lsTree.split("\n");
-
-      const tree: TreeType = {
-        type: "tree",
-        mode: "040000",
-        oid: commitInfo.commit.tree,
-        name: ".",
-        path: ".",
-        entries: {},
-      };
-
-      lines.forEach((lineString) => {
-        const [, type, oidAndPath] = lineString.split(" ");
-        if (oidAndPath) {
-          const [oid, filepath] = oidAndPath.split("\t");
-          const pathParts = filepath.split(sep);
-          const lastPart = pathParts[pathParts.length - 1];
-          let currentTree = tree.entries;
-          pathParts.forEach((part, i) => {
-            if (i === pathParts.length - 1) {
-              if (type === "tree") {
-                currentTree[part] = {
-                  type: "tree",
-                  mode: "040000",
-                  oid,
-                  name: lastPart,
-                  path: filepath,
-                  entries: {},
-                };
-              } else {
-                currentTree[part] = {
-                  type: "blob",
-                  mode: "100644",
-                  oid,
-                  name: lastPart,
-                  path: filepath,
-                };
-              }
-            } else {
-              const next = currentTree[part];
-              if (next.type === "tree") {
-                currentTree = next.entries;
-              }
-            }
-          });
-        }
-      });
-      return tree;
-    } else {
-      throw new Error(`Unexepcted response from ls-tree for ref ${ref}`);
-    }
-  }
-
-  async _lsTree({ dir, ref }: { dir: string; ref: string }) {
+  async _lsTree({ dir, ref }: { dir: string; ref: string }): Promise<string> {
     return new Promise((resolve, reject) => {
       exec(
         `git ls-tree ${ref} -r -t`,

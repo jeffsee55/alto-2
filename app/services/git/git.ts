@@ -1,19 +1,12 @@
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { z } from "zod";
-import { schema, tables } from "./schema";
+import { tables } from "./schema";
 import { SQL, and, eq, not, sql } from "drizzle-orm";
-import { hashBlob } from "isomorphic-git";
-import { sep, parse as pathParse } from "path";
 import diff3Merge from "diff3";
-import type { GitServer } from "./git.server";
+import { sep, parse as pathParse } from "path";
 import { Buffer } from "buffer";
+import type { GitBase } from "./git.interface";
 
-type DB =
-  | BetterSQLite3Database<typeof schema>
-  | LibSQLDatabase<typeof schema>
-  | SqliteRemoteDatabase<typeof schema>;
+import type { TreeType, BlobType, DB } from "./types";
 
 export const movieRepoPath = "/Users/jeffsee/code/movie-content";
 // export const movieRepoPath = "/Users/jeffsee/code/movie-content-private";
@@ -32,14 +25,14 @@ export class GitExec {
   repoName: string;
   dir: string;
   db: DB;
-  exec: GitServer;
+  exec: GitBase;
 
   constructor(args: {
     orgName: string;
     repoName: string;
     dir: string;
     db: DB;
-    exec: GitServer;
+    exec: GitBase;
   }) {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
@@ -48,12 +41,12 @@ export class GitExec {
     this.exec = args.exec;
   }
 
-  static async hashBlob(content: string) {
-    const { oid } = await hashBlob({
-      object: content,
-    });
-    return oid;
-  }
+  // static async hashBlob(content: string) {
+  //   const { oid } = await hashBlob({
+  //     object: content,
+  //   });
+  //   return oid;
+  // }
 
   async findBaseCommit(args: { ourCommitOid: string; theirCommitOid: string }) {
     const ourCommit = await this.db.query.commits.findFirst({
@@ -437,7 +430,7 @@ export class Repo {
      */
     dir: string;
     db: DB;
-    exec: GitServer;
+    exec: GitBase;
     branchName: string;
   }) {
     const gitExec = new GitExec({
@@ -462,7 +455,7 @@ export class Repo {
      */
     dir: string;
     db: DB;
-    exec: GitServer;
+    exec: GitBase;
     branchName: string;
   }) {
     const gitExec = new GitExec({
@@ -735,7 +728,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
           if (!cleanMerge) {
             throw new Error(`Unable to merge \n${mergedText}`);
           } else {
-            const oid = await GitExec.hashBlob(mergedText);
+            const oid = await this.gitExec.exec.hashBlob(mergedText);
             await this.db
               .insert(tables.blobs)
               .values({
@@ -945,7 +938,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
     // performance reasons
     const currentCommit = await this.currentCommit();
 
-    const blobOid = await GitExec.hashBlob(args.content);
+    const blobOid = await this.gitExec.exec.hashBlob(args.content);
 
     const tree = currentCommit.tree;
     GitExec.updateTree({ blobOid, tree, path: args.path });
@@ -1189,26 +1182,6 @@ export class Commit {
     });
   }
 }
-
-// Current the these types are more verbose than they need to be
-// at some scale it might make sense to omit `mode` and `oid`
-// since mode can be inferred and oid is likely being changed
-// depending on what type of operation is being performed
-export type TreeType = {
-  type: "tree";
-  mode: "040000";
-  name: string;
-  path: string;
-  oid: string;
-  entries: Record<string, TreeType | BlobType>;
-};
-type BlobType = {
-  type: "blob";
-  mode: "100644";
-  oid: string;
-  name: string;
-  path: string;
-};
 
 const createSortableDirectoryPath = (path: string) => {
   return pathParse(path).dir.replace(/\//g, " ");
