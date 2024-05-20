@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
-import { Repo, movieRepoPath, movieRepoConfig } from "./git";
-import { loadDatabase } from "./database";
-import { GitServer } from "./git.server";
+import { Repo, movieRepoPath, movieRepoConfig } from "../git";
+import { loadDatabase } from "../database";
+import { GitServer } from "../git.server";
 
 tmp.setGracefulCleanup();
 

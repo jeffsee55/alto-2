@@ -1,18 +1,46 @@
 import { TreeType } from "./types";
 import { sep } from "path";
 import type { ReadCommitResult } from "isomorphic-git";
-import type { Buffer } from "buffer";
+import { Buffer } from "buffer";
 
 export class GitBase {
+  async hash(bufferOrString: Buffer | string): Promise<string> {
+    let buffer: Buffer;
+    if (!Buffer.isBuffer(bufferOrString)) {
+      buffer = Buffer.from(bufferOrString);
+    } else {
+      buffer = bufferOrString;
+    }
+    return this._hash(buffer);
+  }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async hash(str: Buffer): Promise<string> {
+  async _hash(buffer: Buffer): Promise<string> {
     throw new Error(`Not implemented`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async hashBlob(str: string): Promise<string> {
-    throw new Error(`Not implemented`);
+  async hashBlob(string: string) {
+    return this.hash(this.wrap({ type: "blob", bufferOrString: string }));
   }
+
+  wrap({
+    type,
+    bufferOrString,
+  }: {
+    type: string;
+    bufferOrString: Buffer | string;
+  }) {
+    let buffer: Buffer;
+    if (!Buffer.isBuffer(bufferOrString)) {
+      buffer = Buffer.from(bufferOrString);
+    } else {
+      buffer = bufferOrString;
+    }
+    return Buffer.concat([
+      Buffer.from(`${type} ${buffer.byteLength.toString()}\x00`),
+      Buffer.from(buffer),
+    ]);
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async readBlob(dir: string, oid: string): Promise<string> {
     throw new Error(`Not implemented`);
