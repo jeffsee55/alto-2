@@ -53,7 +53,6 @@ export const clientAction = async (args: ClientActionFunctionArgs) => {
   });
 
   const content = body.get("content")?.toString() || "";
-  console.log({ path, content });
 
   await branch.upsert({
     path,
@@ -67,7 +66,7 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
   const {
     orgName,
     repoName,
-    branch,
+    branch: branchName,
     "*": path,
   } = z
     .object({
@@ -78,29 +77,38 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
     })
     .parse(args.params);
   const db = await import("../components/repo").then((mod) => mod.db);
-  const data = await db.query.blobsToBranches.findFirst({
+  const gitExec = new GitExec({
+    db: db,
+    orgName,
+    repoName,
+    exec: new GitBrowser(),
+    remoteSource: "/Users/jeffsee/code/movie-content",
+  });
+  const branchRecord = await db.query.branches.findFirst({
     where(fields, ops) {
       return ops.and(
         ops.eq(fields.orgName, orgName),
         ops.eq(fields.repoName, repoName),
-        ops.eq(fields.branchName, branch),
-        ops.eq(fields.path, path)
+        ops.eq(fields.branchName, branchName)
       );
     },
-    with: {
-      blob: true,
-    },
   });
-  if (data) {
-    return data;
-  } else {
-    return { blob: { oid: "", content: "noncontent" } };
+  if (!branchRecord) {
+    throw new Error(`Branch ${branchName} not found`);
   }
+  const branch = Branch.fromRecord({
+    db: db,
+    gitExec,
+    ...branchRecord,
+  });
+  const list = await branch.list();
+  const item = await branch.find({ path });
+  return { list, item };
 };
 
 export default function Page() {
   const [isBrowser, setIsBrowser] = React.useState(false);
-  const clientData = useLoaderData();
+  const clientData = useLoaderData<typeof clientLoader>();
 
   React.useEffect(() => {
     setIsBrowser(true);

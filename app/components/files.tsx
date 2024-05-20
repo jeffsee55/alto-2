@@ -5,9 +5,15 @@ import { schema, tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
-import type { TreeType } from "~/services/git/types";
-import { Form, Link, useParams, useSubmit } from "@remix-run/react";
+import type { BlobType, TreeType } from "~/services/git/types";
+import { Form, Link } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
+import { Branch } from "~/services/git/git";
+
+type LoaderData = {
+  item: Awaited<ReturnType<Branch["find"]>>;
+  list: Awaited<ReturnType<Branch["list"]>>;
+};
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
@@ -27,7 +33,7 @@ const checkDatabaseExists = async () => {
   return exists;
 };
 
-export default function Files(props) {
+export default function Files(props: LoaderData) {
   const [dbExists, setDbExists] = React.useState(false);
   const [, setRepos] = React.useState<
     Awaited<ReturnType<typeof populateRepos>>
@@ -57,17 +63,12 @@ export default function Files(props) {
   return <>{dbExists ? <Main {...props} /> : null}</>;
 }
 
-const Main = (props) => {
-  const submit = useSubmit();
-  const params = useParams();
+const Main = (props: LoaderData) => {
   const [data, setData] = React.useState<TreeType[]>([]);
   const [editorWidth, setEditorWidth] = React.useState(0);
-  const [currentOid, setCurrentOid] = React.useState(props.blob.oid);
   const [currentContent, setCurrentContent] = React.useState(
-    props.blob.content
+    props.item?.item.blob.content
   );
-  // console.log(props);
-  // const [currentCommit, setCurrentCommit] = React.useState();
 
   React.useEffect(() => {
     const run = async () => {
@@ -101,14 +102,15 @@ const Main = (props) => {
   return (
     <div className="w-full flex divide-x divide-gray-800 flex-1 ">
       <div className="w-72" ref={ref}>
-        <Tree
+        <Tree<TreeType | BlobType>
           height={ref.current?.getBoundingClientRect().height}
           initialData={data}
           idAccessor="path"
           childrenAccessor={(d) => {
-            if (d?.entries) {
+            if (d.type === "tree") {
               return Object.values(d?.entries || {});
             }
+            return null;
           }}
         >
           {Node}
@@ -122,34 +124,33 @@ const Main = (props) => {
           theme="vs-dark"
           onChange={(value) => {
             setCurrentContent(value);
-            // // const hashBlob = async ({ object }) => {
-            // //   setCurrentOid(hashHex);
-            // // };
-            // // hashBlob({ object: value });
           }}
-          value={props.blob.content || ""}
+          value={props.item?.item.blob.content || ""}
         />
       </div>
       <div className="w-72 p-6">
+        <div className="">
+          <h2 className="text-lg font-semibold leading-6 text-gray-100">
+            {props.list.branchName}
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-200">
+            {props.list.commitOid.slice(0, 7)}
+          </p>
+        </div>
         <Form method="post" action={window.location.pathname}>
           <div className="mb-4">
             <div className="px-4 sm:px-0">
               <h3 className="text-base font-semibold leading-7 text-gray-100">
-                {props.path}
+                {props.item?.item.path}
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-200">
-                {currentOid.slice(0, 7)}
+                {props.item?.item.blob.oid.slice(0, 7)}
               </p>
             </div>
           </div>
           <input type="hidden" value={currentContent} name="content" />
           <button
             type="submit"
-            // onClick={async () => {
-            //   // const res = await branch.find({
-            //   //   path,
-            //   // });
-            // }}
             className="w-full rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             Save
@@ -164,7 +165,7 @@ function Node({
   node,
   style,
   dragHandle,
-}: NodeRendererProps<{ id: string; name: string }>) {
+}: NodeRendererProps<TreeType | BlobType>) {
   return node.isLeaf ? (
     <div style={style} ref={dragHandle} className="flex gap-1 items-center">
       <Link to={node.data.path} className="flex gap-2 items-cneter">
