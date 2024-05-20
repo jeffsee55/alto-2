@@ -12,9 +12,6 @@ export class GitServer extends GitBase {
   }
 
   async readBlob(dir: string, oid: string) {
-    // Skipping unnecessary sha lookup
-    // this is extremely fast when the objects are coming from a
-    // pack file because the cache holds them in memory
     const res = await git.readObject({
       fs,
       dir,
@@ -68,8 +65,8 @@ export class GitServer extends GitBase {
     return commit;
   }
 
-  async clone(args: { dir: string; branchName: string }) {
-    let dir = args.dir;
+  async clone(args: { remoteSource: string; branchName: string }) {
+    let dir = args.remoteSource;
     const real = false;
     if (real) {
       const tmpDir = tmp.dirSync({ unsafeCleanup: true });
@@ -102,7 +99,7 @@ export class GitServer extends GitBase {
     }
     // const pathToGitRepo = await fs.mkdtempSync(`${tmpDir.name}${sep}`);
     const commitInfo = await this._getCommitForBranch({
-      dir: args.dir,
+      dir: args.remoteSource,
       branch: args.branchName,
     });
 

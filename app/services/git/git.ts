@@ -23,30 +23,23 @@ export class GitExec {
   cache: Record<string, unknown> = {};
   orgName: string;
   repoName: string;
-  dir: string;
+  remoteSource: string;
   db: DB;
   exec: GitBase;
 
   constructor(args: {
     orgName: string;
     repoName: string;
-    dir: string;
+    remoteSource: string;
     db: DB;
     exec: GitBase;
   }) {
+    this.remoteSource = args.remoteSource;
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
-    this.dir = args.dir;
     this.exec = args.exec;
   }
-
-  // static async hashBlob(content: string) {
-  //   const { oid } = await hashBlob({
-  //     object: content,
-  //   });
-  //   return oid;
-  // }
 
   async findBaseCommit(args: { ourCommitOid: string; theirCommitOid: string }) {
     const ourCommit = await this.db.query.commits.findFirst({
@@ -369,22 +362,7 @@ export class GitExec {
         Buffer.from([0]),
         buffer,
       ]);
-      const result2 = this.exec.hash(wrapped);
-      // Uncomment to check against the isomorphic-git implementation
-      // const isoResult = await git.writeTree({
-      //   fs,
-      //   dir: "some-dir",
-      //   tree: Object.values(tree.entries).map((e) => ({
-      //     mode: e.mode,
-      //     path: e.name,
-      //     oid: e.oid,
-      //     type: e.type,
-      //   })),
-      // });
-      // if (isoResult !== result2) {
-      //   console.log("hmmm", tree.name);
-      // }
-      return result2;
+      return this.exec.hash(wrapped);
     };
     const res = await buildTree(tree);
 
@@ -392,17 +370,21 @@ export class GitExec {
   }
 
   async clone(args: { branchName: string }) {
-    return this.exec.clone({ dir: this.dir, branchName: args.branchName });
+    return this.exec.clone({
+      remoteSource: this.remoteSource,
+      branchName: args.branchName,
+    });
   }
 
   async readBlob(oid: string) {
-    return this.exec.readBlob(this.dir, oid);
+    return this.exec.readBlob(this.remoteSource, oid);
   }
 }
 
 export class Repo {
   orgName: string;
   repoName: string;
+  remoteSource: string;
 
   db: DB;
   gitExec: GitExec;
@@ -410,6 +392,7 @@ export class Repo {
   constructor(args: {
     orgName: string;
     repoName: string;
+    remoteSource: string;
 
     db: DB;
     gitExec: GitExec;
@@ -417,6 +400,7 @@ export class Repo {
     this.orgName = args.orgName;
     this.repoName = args.repoName;
     this.db = args.db;
+    this.remoteSource = args.remoteSource;
     this.gitExec = args.gitExec;
   }
 
@@ -433,14 +417,17 @@ export class Repo {
     exec: GitBase;
     branchName: string;
   }) {
+    const remoteSource = args.dir
+      ? args.dir
+      : `https://github.com/${args.orgName}/${args.repoName}.git`;
     const gitExec = new GitExec({
       orgName: args.orgName,
       repoName: args.repoName,
+      remoteSource,
       db: args.db,
-      dir: args.dir,
       exec: args.exec,
     });
-    const repo = new Repo({ ...args, gitExec });
+    const repo = new Repo({ ...args, gitExec, remoteSource });
     await repo.initialize();
     return await repo.checkout({ branchName: args.branchName });
   }
@@ -458,14 +445,17 @@ export class Repo {
     exec: GitBase;
     branchName: string;
   }) {
+    const remoteSource = args.dir
+      ? args.dir
+      : `https://github.com/${args.orgName}/${args.repoName}.git`;
     const gitExec = new GitExec({
       orgName: args.orgName,
       repoName: args.repoName,
       db: args.db,
-      dir: args.dir,
+      remoteSource,
       exec: args.exec,
     });
-    return new Repo({ ...args, gitExec });
+    return new Repo({ ...args, gitExec, remoteSource });
   }
 
   async checkout(args: { branchName: string }) {
@@ -483,7 +473,11 @@ export class Repo {
   async initialize() {
     await this.db
       .insert(tables.repos)
-      .values({ orgName: this.orgName, repoName: this.repoName })
+      .values({
+        orgName: this.orgName,
+        repoName: this.repoName,
+        remoteUrl: this.remoteSource,
+      })
       .onConflictDoNothing();
   }
   async createBranch({

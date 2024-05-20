@@ -11,6 +11,7 @@ export const repos = sqliteTable(
   {
     orgName: text("org_name").notNull(),
     repoName: text("repo_name").notNull(),
+    remoteUrl: text("remote_source").notNull(),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.orgName, t.repoName] }),

@@ -43,7 +43,7 @@ export class GitBrowser extends GitBase {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async clone(args: { dir: string; branchName: string }): Promise<{
+  async clone(args: { remoteSource: string; branchName: string }): Promise<{
     branchName: string;
     dir: string;
     tree: TreeType;

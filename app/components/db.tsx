@@ -67,6 +67,7 @@ const setup = async () => {
       CREATE TABLE 'repos' (
         'org_name' text NOT NULL,
         'repo_name' text NOT NULL,
+        'remote_source' text NOT NULL,
         PRIMARY KEY('org_name', 'repo_name')
       );
       `);

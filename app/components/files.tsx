@@ -7,9 +7,10 @@ import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
 import type { TreeType } from "~/services/git/types";
 import { Branch, GitExec } from "~/services/git/git";
-import { Link } from "@remix-run/react";
+import { Link, useParams, useSubmit } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
 import { GitBrowser } from "~/services/git/git.browser";
+import { z } from "zod";
 
 // Initialize Drizzle with SQLocal driver
 const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
@@ -60,12 +61,16 @@ export default function Files(props) {
 }
 
 const Main = (props) => {
+  const submit = useSubmit();
+  const params = useParams();
   const [data, setData] = React.useState<TreeType[]>([]);
   const [editorWidth, setEditorWidth] = React.useState(0);
   const [currentOid, setCurrentOid] = React.useState(props.blob.oid);
   const [currentContent, setCurrentContent] = React.useState(
     props.blob.content
   );
+  // console.log(props);
+  // const [currentCommit, setCurrentCommit] = React.useState();
 
   React.useEffect(() => {
     const run = async () => {
@@ -119,20 +124,11 @@ const Main = (props) => {
           language="json"
           theme="vs-dark"
           onChange={(value) => {
-            const hashBlob = async ({ object }) => {
-              const encoder = new TextEncoder();
-              const data = encoder.encode(value);
-
-              // Use the SubtleCrypto API to hash the data
-              const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-              const hashArray = Array.from(new Uint8Array(hashBuffer));
-              const hashHex = hashArray
-                .map((byte) => byte.toString(16).padStart(2, "0"))
-                .join("");
-              setCurrentOid(hashHex);
-              setCurrentContent(value);
-            };
-            hashBlob({ object: value });
+            setCurrentContent(value);
+            // // const hashBlob = async ({ object }) => {
+            // //   setCurrentOid(hashHex);
+            // // };
+            // // hashBlob({ object: value });
           }}
           value={props.blob.content || ""}
         />
@@ -151,13 +147,12 @@ const Main = (props) => {
         <button
           type="button"
           onClick={async () => {
-            console.log(currentContent);
             const gitExec = new GitExec({
               db: db,
               orgName: "jeffsee55",
               repoName: "movie-content",
               exec: new GitBrowser(),
-              dir: "/Users/jeffsee/code/movie-content",
+              remoteSource: "/Users/jeffsee/code/movie-content",
             });
             const branch = Branch.fromRecord({
               db: db,
@@ -167,13 +162,19 @@ const Main = (props) => {
               repoName: "movie-content",
               commitOid: "",
             });
+            const path = z.string().parse(params["*"]);
+            submit(
+              { myKey: "myValue" },
+              { method: "post", action: window.location.pathname }
+            );
+
             await branch.upsert({
-              path: "content/crew/crew3.md",
+              path,
               content: currentContent,
-              oid: currentOid,
             });
-            // const result = await branch.find({ path: "content/crew/crew3.md" });
-            // console.log(result);
+            // const res = await branch.find({
+            //   path,
+            // });
           }}
           className="w-full rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         >

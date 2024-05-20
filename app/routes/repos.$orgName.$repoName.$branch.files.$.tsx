@@ -1,6 +1,11 @@
 import React from "react";
 import { HeadersFunction } from "@vercel/remix";
-import { ClientLoaderFunctionArgs, useLoaderData } from "@remix-run/react";
+import {
+  ClientActionFunctionArgs,
+  ClientLoaderFunctionArgs,
+  redirect,
+  useLoaderData,
+} from "@remix-run/react";
 import { z } from "zod";
 
 export const headers: HeadersFunction = () => ({
@@ -10,12 +15,38 @@ export const headers: HeadersFunction = () => ({
 
 const Files = React.lazy(() => import("~/components/files"));
 
+export const clientAction = async (args: ClientActionFunctionArgs) => {
+  // const url = new URL(args.request.url);
+  // console.log(url);
+  // return redirect(url.pathname);
+  console.log("got action...");
+  return {};
+};
+
 export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
-  const path = z.string().parse(args.params["*"]);
+  const {
+    orgName,
+    repoName,
+    branch,
+    "*": path,
+  } = z
+    .object({
+      orgName: z.string(),
+      repoName: z.string(),
+      branch: z.string(),
+      "*": z.string(),
+    })
+    .parse(args.params);
   const db = await import("../components/repo").then((mod) => mod.db);
+  console.log("i ran...", orgName, repoName, branch, path);
   const data = await db.query.blobsToBranches.findFirst({
-    where(fields, operators) {
-      return operators.eq(fields.path, path);
+    where(fields, ops) {
+      return ops.and(
+        ops.eq(fields.orgName, orgName),
+        ops.eq(fields.repoName, repoName),
+        ops.eq(fields.branchName, branch),
+        ops.eq(fields.path, path)
+      );
     },
     with: {
       blob: true,
