@@ -18,37 +18,7 @@ export const headers: HeadersFunction = () => ({
   "Cross-Origin-Opener-Policy": "same-origin",
 });
 
-export async function loader() {
-  const { db } = loadDatabase();
-  // for await (const table of Object.values(tables)) {
-  //   await db.delete(table).run();
-  // }
-  const repo = await Repo.init({
-    ...movieRepoConfig,
-    db,
-    dir: movieRepoPath,
-    branchName: "main",
-  });
-  const branch = await repo.getBranch({ branchName: "main" });
-
-  const result = await branch.list();
-  // console.log(result.items);
-  return result;
-}
-
-const Database = React.lazy(() => import("~/components/db"));
-
 export default function Index() {
-  const [isBrowser, setIsBrowser] = React.useState(false);
-
-  React.useEffect(() => {
-    setIsBrowser(true);
-  }, []);
-
-  if (!isBrowser) {
-    return null;
-  }
-
   return (
     <div className="w-full flex-1 flex">
       <div className="pt-24 pb-12 mx-auto">
