@@ -1,16 +1,13 @@
 import React from "react";
 import { HeadersFunction } from "@vercel/remix";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
 import {
   ClientActionFunctionArgs,
   ClientLoaderFunctionArgs,
   useLoaderData,
 } from "@remix-run/react";
-import { schema } from "~/services/git/schema";
 import { z } from "zod";
 import { Branch, GitExec } from "~/services/git/git";
 import { GitBrowser } from "~/services/git/git.browser";
-import { SQLocalDrizzle } from "sqlocal/drizzle";
 
 export const headers: HeadersFunction = () => ({
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -34,8 +31,7 @@ export const clientAction = async (args: ClientActionFunctionArgs) => {
     })
     .parse(args.params);
   const body = await args.request.formData();
-  const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
-  const db = drizzle(driver, { schema });
+  const db = window.getAlto().db;
   const gitExec = new GitExec({
     db: db,
     orgName,
@@ -76,7 +72,7 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
       "*": z.string(),
     })
     .parse(args.params);
-  const db = await import("../components/repo").then((mod) => mod.db);
+  const db = window.getAlto().db;
   const gitExec = new GitExec({
     db: db,
     orgName,

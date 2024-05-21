@@ -1,7 +1,5 @@
 import React, { useRef } from "react";
-import { SQLocalDrizzle } from "sqlocal/drizzle";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { schema, tables } from "~/services/git/schema";
+import { tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
@@ -15,17 +13,12 @@ type LoaderData = {
   list: Awaited<ReturnType<Branch["list"]>>;
 };
 
-// Initialize Drizzle with SQLocal driver
-const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
-export const db = drizzle(driver, { schema });
-
 const checkDatabaseExists = async () => {
   let exists = true;
   for await (const table of Object.values(tables)) {
     try {
-      await db.run(sql`SELECT * FROM ${table} LIMIT 1`);
+      await window.getAlto().db.run(sql`SELECT * FROM ${table} LIMIT 1`);
     } catch (e) {
-      // console.log(e);
       exists = false;
       break;
     }
@@ -51,7 +44,7 @@ export default function Files(props: LoaderData) {
   }, []);
 
   const populateRepos = async () => {
-    const res = await db.query.repos.findMany({
+    const res = await window.getAlto().db.query.repos.findMany({
       with: {
         branches: { with: { blobsToBranches: { columns: { blobOid: true } } } },
       },
@@ -71,12 +64,16 @@ const Main = (props: LoaderData) => {
   );
 
   React.useEffect(() => {
+    setCurrentContent(props.item?.item.blob.content);
+  }, [props.item?.item.blob.content]);
+
+  React.useEffect(() => {
     const run = async () => {
-      const branchRecord = await db.query.branches.findFirst({
+      const branchRecord = await window.getAlto().db.query.branches.findFirst({
         where: (fields, ops) => ops.eq(fields.branchName, "main"),
       });
       if (branchRecord) {
-        const commitRecord = await db.query.commits.findFirst({
+        const commitRecord = await window.getAlto().db.query.commits.findFirst({
           where: (fields, ops) => ops.eq(fields.oid, branchRecord.commitOid),
         });
         if (commitRecord) {
@@ -91,9 +88,16 @@ const Main = (props: LoaderData) => {
   const ref = useRef<HTMLDivElement>(null);
   const ref2 = useRef<HTMLDivElement>(null);
 
+  const width = ref2.current?.getBoundingClientRect().width;
+
   React.useEffect(() => {
-    setEditorWidth(ref2.current?.getBoundingClientRect().width || 0);
-  }, [ref2.current]);
+    setEditorWidth((current) => {
+      if (current === 0) {
+        return ref2.current?.getBoundingClientRect().width || 0;
+      }
+      return current;
+    });
+  }, [setEditorWidth, width]);
 
   if (data.length === 0) {
     return null;
@@ -125,7 +129,7 @@ const Main = (props: LoaderData) => {
           onChange={(value) => {
             setCurrentContent(value);
           }}
-          value={props.item?.item.blob.content || ""}
+          value={currentContent}
         />
       </div>
       <div className="w-72 p-6">

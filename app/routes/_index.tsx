@@ -1,12 +1,6 @@
 import type { MetaFunction, HeadersFunction } from "@remix-run/node";
 import { clsx } from "clsx";
-import {
-  BoltIcon,
-  ChevronRightIcon,
-  GitBranchIcon,
-  HomeIcon,
-  SearchIcon,
-} from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { Repo, movieRepoPath, movieRepoConfig } from "~/services/git/git";
 import { Link } from "@remix-run/react";
 import { loadDatabase } from "~/services/git/database";

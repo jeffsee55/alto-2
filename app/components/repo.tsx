@@ -1,18 +1,12 @@
 import React from "react";
-import { SQLocalDrizzle } from "sqlocal/drizzle";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { schema, tables } from "~/services/git/schema";
+import { tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
-
-// Initialize Drizzle with SQLocal driver
-const { driver } = new SQLocalDrizzle("migrations-test.sqlite3");
-export const db = drizzle(driver, { schema });
 
 const checkDatabaseExists = async () => {
   let exists = true;
   for await (const table of Object.values(tables)) {
     try {
-      await db.run(sql`SELECT * FROM ${table} LIMIT 1`);
+      await window.getAlto().db.run(sql`SELECT * FROM ${table} LIMIT 1`);
     } catch (e) {
       // console.log(e);
       exists = false;
@@ -40,7 +34,7 @@ export default function Database() {
   }, []);
 
   const populateRepos = async () => {
-    const res = await db.query.repos.findMany({
+    const res = await window.getAlto().db.query.repos.findMany({
       with: {
         branches: { with: { blobsToBranches: { columns: { blobOid: true } } } },
       },

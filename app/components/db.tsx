@@ -1,22 +1,15 @@
 import React from "react";
-import { SQLocalDrizzle } from "sqlocal/drizzle";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { schema, tables } from "~/services/git/schema";
+import { tables } from "~/services/git/schema";
 import { sql } from "drizzle-orm";
 import { trpc } from "./trpc-client";
 import clsx from "clsx";
 import { Link } from "@remix-run/react";
 
-// Initialize Drizzle with SQLocal driver
-const { driver, getDatabaseFile } = new SQLocalDrizzle(
-  "migrations-test.sqlite3"
-);
-export const db = drizzle(driver, { schema });
-
 const checkDatabaseExists = async () => {
   let exists = true;
   for await (const table of Object.values(tables)) {
     try {
+      const db = window.getAlto().db;
       await db.run(sql`SELECT * FROM ${table} LIMIT 1`);
     } catch (e) {
       // console.log(e);
@@ -28,6 +21,7 @@ const checkDatabaseExists = async () => {
 };
 
 const setup = async () => {
+  const db = window.getAlto().db;
   await db.run(sql`DROP TABLE IF EXISTS blobs`);
   await db.run(sql`DROP TABLE IF EXISTS blobs_to_branches`);
   await db.run(sql`DROP TABLE IF EXISTS branches`);
@@ -74,6 +68,7 @@ const setup = async () => {
 };
 
 const importDump = async () => {
+  const db = window.getAlto().db;
   const list2 = await trpc.dump.query();
   for await (const table of Object.values(tables)) {
     await db.delete(table).run();
@@ -111,7 +106,7 @@ export default function Database() {
   }, []);
 
   const populateRepos = async () => {
-    const res = await db.query.repos.findMany({
+    const res = await window.getAlto().db.query.repos.findMany({
       with: {
         branches: { with: { blobsToBranches: { columns: { blobOid: true } } } },
       },
@@ -126,7 +121,7 @@ export default function Database() {
         type="button"
         onClick={async () => {
           // Drop this into https://sqlite.drizzle.studio/
-          const databaseFile = await getDatabaseFile();
+          const databaseFile = await window.getAlto().getDatabaseFile();
           const fileUrl = URL.createObjectURL(databaseFile);
           console.log(fileUrl);
 
