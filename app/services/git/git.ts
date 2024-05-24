@@ -588,6 +588,7 @@ export class Branch {
   commitOid: string;
 
   gitExec: GitExec;
+  error?: GitError;
 
   constructor(args: {
     orgName: string;
@@ -651,8 +652,14 @@ WHERE ${table.branchName} = ${this.branchName};`;
     await this.db.run(statement);
     return newBranch;
   }
-  async syncChanges(changes: z.infer<typeof changesSchema>["changes"]) {
-    for await (const change of changes) {
+  async syncChanges(args: {
+    direction: "ahead" | "behind";
+    changes: z.infer<typeof changesSchema>["changes"];
+  }) {
+    if (args.direction === "behind") {
+      throw new GitError("NO_SYNC");
+    }
+    for await (const change of args.changes) {
       try {
         for await (const modified of change.modified) {
           await this.upsert({
@@ -676,11 +683,51 @@ WHERE ${table.branchName} = ${this.branchName};`;
       }
     }
   }
+  /**
+   * This could be an expensive operation, if the remote is ahead of
+   * the client it will walk commits. Walking the parents of each
+   * commit one-by-one should ideally grab the commit with several
+   * parents included in the db request (like 10?) so walking is less costly
+   */
+  async changesSince2(
+    commitOid: string,
+    callback: (commit: Commit) => ReturnType<Branch["changesSince"]>
+  ): Promise<{
+    direction: "ahead" | "behind";
+    changes: Awaited<ReturnType<Branch["changesSince"]>>;
+  }> {
+    const changesSince = await this.changesSince(commitOid);
+    if (changesSince.length > 0) {
+      return {
+        direction: "ahead",
+        changes: await this.changesSince(commitOid),
+      };
+    } else {
+      const changesResult: {
+        direction: "ahead" | "behind";
+        changes: Awaited<ReturnType<Branch["changesSince"]>>;
+      } = {
+        direction: "behind",
+        changes: [],
+      };
+      const commitFromBrowser = await this.currentCommit();
+      await commitFromBrowser.walkParents(async (commit) => {
+        const changes2 = await callback(commit);
+        if (changes2.length > 0) {
+          changesResult.changes = changes2;
+          return true;
+        }
+        return false;
+      });
+      return changesResult;
+    }
+  }
 
   async changesSince(
     commitOid: string
   ): Promise<z.infer<typeof changesSchema>["changes"]> {
     let currentCommit = await this.currentCommit();
+    let foundParent = false;
     const commitsToSync = [currentCommit];
     const diffs: (ReturnType<GitExec["findDiffs"]> & {
       commit: {
@@ -724,20 +771,29 @@ WHERE ${table.branchName} = ${this.branchName};`;
         blobs,
       });
       if (parentCommit.oid === commitOid) {
+        foundParent = true;
         // commitsToSync.push(parentCommit);
         return true;
       }
       currentCommit = parentCommit;
       return false;
     });
+    if (!foundParent) {
+      return [];
+    }
     return diffs.reverse();
   }
 
-  async diff(branchToMerge: Branch) {
+  async findBaseCommit(commitOid: string) {
     const baseCommit = await this.gitExec.findBaseCommit({
       ourCommitOid: this.commitOid,
-      theirCommitOid: branchToMerge.commitOid,
+      theirCommitOid: commitOid,
     });
+    return baseCommit;
+  }
+
+  async diff(branchToMerge: Branch) {
+    const baseCommit = await this.findBaseCommit(branchToMerge.commitOid);
 
     const ourCommit = await this.currentCommit();
     const theirCommit = await branchToMerge.currentCommit();
@@ -1432,3 +1488,17 @@ export const changesSchema = z.object({
     })
   ),
 });
+
+const errorCodes = {
+  NO_SYNC: {
+    description: "Unable to sync because the remote is ahead",
+  },
+};
+
+export class GitError extends Error {
+  code: keyof typeof errorCodes;
+  constructor(code: keyof typeof errorCodes) {
+    super();
+    this.code = code;
+  }
+}
