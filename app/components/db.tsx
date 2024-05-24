@@ -70,6 +70,7 @@ const setup = async () => {
 const importDump = async () => {
   const db = window.getAlto().db;
   const list2 = await trpc.dump.query();
+  console.log("deleting tables...");
   for await (const table of Object.values(tables)) {
     await db.delete(table).run();
   }
@@ -77,6 +78,7 @@ const importDump = async () => {
   for await (const [tableName, table] of Object.entries(tables)) {
     await db.delete(table).run();
     const items = list2[tableName];
+    console.log(`importing ${items.length} from ${tableName}`);
     for await (const item of items) {
       try {
         await db.insert(table).values(item);
@@ -86,6 +88,7 @@ const importDump = async () => {
       }
     }
   }
+  console.log("import dump done");
 };
 
 export default function Database() {
@@ -240,7 +243,7 @@ export default function Database() {
                       Reimport
                     </button>
                     <Link
-                      to={`/repos/${repo.orgName}/${repo.repoName}`}
+                      to={`/repos/${repo.orgName}/${repo.repoName}/main/files`}
                       className="block rounded-md bg-gray-700/10 px-2.5 py-1.5 text-sm font-semibold text-gray-200 shadow-sm ring-1 ring-inset ring-gray-600 hover:bg-gray-700"
                     >
                       Visit

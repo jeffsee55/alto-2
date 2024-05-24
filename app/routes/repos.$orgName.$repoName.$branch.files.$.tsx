@@ -4,10 +4,12 @@ import {
   ClientActionFunctionArgs,
   ClientLoaderFunctionArgs,
   useLoaderData,
+  useParams,
 } from "@remix-run/react";
 import { z } from "zod";
-import { Branch, GitExec } from "~/services/git/git";
-import { GitBrowser } from "~/services/git/git.browser";
+import { trpc } from "~/components/trpc-client";
+import { getBranch } from "~/components/use-branch";
+import { GitExec } from "~/services/git/git";
 
 export const headers: HeadersFunction = () => ({
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -17,12 +19,7 @@ export const headers: HeadersFunction = () => ({
 const Files = React.lazy(() => import("~/components/files"));
 
 export const clientAction = async (args: ClientActionFunctionArgs) => {
-  const {
-    orgName,
-    repoName,
-    branch: branchName,
-    "*": path,
-  } = z
+  const { "*": path } = z
     .object({
       orgName: z.string(),
       repoName: z.string(),
@@ -31,22 +28,7 @@ export const clientAction = async (args: ClientActionFunctionArgs) => {
     })
     .parse(args.params);
   const body = await args.request.formData();
-  const db = window.getAlto().db;
-  const gitExec = new GitExec({
-    db: db,
-    orgName,
-    repoName,
-    exec: new GitBrowser(),
-    remoteSource: "/Users/jeffsee/code/movie-content",
-  });
-  const branch = Branch.fromRecord({
-    db: db,
-    orgName,
-    gitExec,
-    branchName,
-    repoName,
-    commitOid: "",
-  });
+  const branch = await getBranch(args.params);
 
   const content = body.get("content")?.toString() || "";
 
@@ -59,12 +41,7 @@ export const clientAction = async (args: ClientActionFunctionArgs) => {
 };
 
 export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
-  const {
-    orgName,
-    repoName,
-    branch: branchName,
-    "*": path,
-  } = z
+  const { "*": path } = z
     .object({
       orgName: z.string(),
       repoName: z.string(),
@@ -72,31 +49,7 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
       "*": z.string(),
     })
     .parse(args.params);
-  const db = window.getAlto().db;
-  const gitExec = new GitExec({
-    db: db,
-    orgName,
-    repoName,
-    exec: new GitBrowser(),
-    remoteSource: "/Users/jeffsee/code/movie-content",
-  });
-  const branchRecord = await db.query.branches.findFirst({
-    where(fields, ops) {
-      return ops.and(
-        ops.eq(fields.orgName, orgName),
-        ops.eq(fields.repoName, repoName),
-        ops.eq(fields.branchName, branchName)
-      );
-    },
-  });
-  if (!branchRecord) {
-    throw new Error(`Branch ${branchName} not found`);
-  }
-  const branch = Branch.fromRecord({
-    db: db,
-    gitExec,
-    ...branchRecord,
-  });
+  const branch = await getBranch(args.params);
   const list = await branch.list();
   const item = await branch.find({ path });
   return { list, item };
@@ -105,6 +58,43 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
 export default function Page() {
   const [isBrowser, setIsBrowser] = React.useState(false);
   const clientData = useLoaderData<typeof clientLoader>();
+  const params = useParams();
+  const {
+    orgName,
+    repoName,
+    branch: branchName,
+  } = z
+    .object({
+      orgName: z.string(),
+      repoName: z.string(),
+      branch: z.string(),
+      "*": z.string(),
+    })
+    .parse(params);
+
+  React.useEffect(() => {
+    const i = setInterval(async () => {
+      const check = await trpc.check.query({
+        orgName,
+        repoName,
+        branchName,
+      });
+      const branch = await getBranch(params);
+      if (check.commitOid === branch.commitOid) {
+        console.log("all good");
+      } else {
+        const diffs = await branch.changesSince(check.commitOid);
+
+        await trpc.sync.mutate({
+          orgName,
+          branchName,
+          repoName,
+          changes: diffs,
+        });
+      }
+    }, 2000);
+    return () => clearInterval(i);
+  }, [branchName, orgName, repoName]);
 
   React.useEffect(() => {
     setIsBrowser(true);

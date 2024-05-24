@@ -2,15 +2,11 @@ import * as git from "isomorphic-git";
 import * as http from "isomorphic-git/http/node";
 import fs from "fs";
 import tmp from "tmp-promise";
-import crypto from "crypto";
 import { exec } from "child_process";
 import { GitBase } from "./git.interface";
+import { Buffer } from "buffer/";
 
 export class GitServer extends GitBase {
-  async _hash(str: Buffer) {
-    return crypto.createHash("sha1").update(str).digest("hex");
-  }
-
   async readBlob(dir: string, oid: string) {
     const res = await git.readObject({
       fs,

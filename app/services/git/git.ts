@@ -3,7 +3,7 @@ import { tables } from "./schema";
 import { SQL, and, eq, not, sql } from "drizzle-orm";
 import diff3Merge from "diff3";
 import { sep, parse as pathParse } from "path";
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
 import type { GitBase } from "./git.interface";
 
 import type { TreeType, BlobType, DB } from "./types";
@@ -137,7 +137,7 @@ export class GitExec {
     });
   }
 
-  findDiffs({
+  findDiffs<T extends boolean>({
     ourTree,
     theirTree,
     baseTree,
@@ -145,6 +145,7 @@ export class GitExec {
     ourTree: TreeType;
     theirTree: TreeType;
     baseTree: TreeType;
+    includeBlobs?: T;
   }): {
     added: { path: string; theirOid: string }[];
     modified: {
@@ -155,7 +156,10 @@ export class GitExec {
     }[];
     deleted: { path: string; baseOid: string; ourOid?: string }[];
   } {
-    const added: { path: string; theirOid: string }[] = [];
+    const added: {
+      path: string;
+      theirOid: string;
+    }[] = [];
     const modified: {
       path: string;
       ourOid?: string;
@@ -333,7 +337,7 @@ export class GitExec {
       for (const [name, entry] of Object.entries(tree.entries)) {
         if (entry.type === "tree") {
           const oid = await buildTree(entry);
-          entries.push({ type: "tree", oid, name });
+          entries.push({ type: "tree", oid: oid, name });
         } else {
           entries.push({ type: "blob", oid: entry.oid, name });
         }
@@ -362,6 +366,8 @@ export class GitExec {
         Buffer.from([0]),
         buffer,
       ]);
+      // I think likely the buffer above is different between
+      // the 2 thanks to Buffer being different (?)
       return this.exec.hash(wrapped);
     };
     const res = await buildTree(tree);
@@ -644,6 +650,87 @@ FROM ${table}
 WHERE ${table.branchName} = ${this.branchName};`;
     await this.db.run(statement);
     return newBranch;
+  }
+  async syncChanges(changes: z.infer<typeof changesSchema>["changes"]) {
+    for await (const change of changes) {
+      try {
+        for await (const modified of change.modified) {
+          await this.upsert({
+            path: modified.path,
+            content: change.blobs[modified.theirOid],
+          });
+        }
+        for await (const added of change.added) {
+          await this.upsert({
+            path: added.path,
+            content: change.blobs[added.theirOid],
+          });
+        }
+        for await (const deleted of change.deleted) {
+          await this.delete({
+            path: deleted.path,
+          });
+        }
+      } catch (e) {
+        // Don't worry about mutations retrying (for now)
+      }
+    }
+  }
+
+  async changesSince(
+    commitOid: string
+  ): Promise<z.infer<typeof changesSchema>["changes"]> {
+    let currentCommit = await this.currentCommit();
+    const commitsToSync = [currentCommit];
+    const diffs: (ReturnType<GitExec["findDiffs"]> & {
+      commit: {
+        message: string;
+        oid: string;
+      };
+      blobs: Record<string, string>;
+    })[] = [];
+
+    await currentCommit.walkParents(async (parentCommit) => {
+      const diffs2 = parentCommit.gitExec.findDiffs({
+        baseTree: parentCommit.tree,
+        ourTree: parentCommit.tree,
+        theirTree: currentCommit.tree,
+      });
+      const blobs: Record<string, string> = {};
+      for await (const diff of diffs2.added) {
+        const value = (await this.find({ path: diff.path }))?.item.blob.content;
+        if (!value) {
+          throw new Error(
+            `Unable to find blob for path ${diff.path} in branch ${this.branchName} of repo ${this.repoName} in org ${this.orgName}`
+          );
+        }
+        blobs[diff.theirOid] = value;
+      }
+      for await (const diff of diffs2.modified) {
+        const value = (await this.find({ path: diff.path }))?.item.blob.content;
+        if (!value) {
+          throw new Error(
+            `Unable to find blob for path ${diff.path} in branch ${this.branchName} of repo ${this.repoName} in org ${this.orgName}`
+          );
+        }
+        // console.log("add", value);
+        // await branch.gitExec.exec.hashBlob(value);
+        blobs[diff.theirOid] = value;
+      }
+      commitsToSync.push(parentCommit);
+      diffs.push({
+        ...diffs2,
+        commit: { message: currentCommit.content, oid: currentCommit.oid },
+        blobs,
+      });
+      if (parentCommit.oid === commitOid) {
+        // commitsToSync.push(parentCommit);
+        return true;
+      }
+      currentCommit = parentCommit;
+      return false;
+    });
+    return diffs.reverse();
   }
 
   async diff(branchToMerge: Branch) {
@@ -1114,16 +1201,19 @@ export class Commit {
     content: string;
     oid: string;
     tree: string;
+    parent?: string | null;
 
     gitExec: GitExec;
   }) {
     const tree = z.record(z.any()).parse(JSON.parse(value.tree)) as TreeType; // FIXME: Dont cast this
-    return Commit.build({
+    return new Commit({
       repoName: value.repoName,
       orgName: value.orgName,
       db: value.db,
       message: value.content,
       tree: tree,
+      oid: value.oid,
+      parents: value.parent ? [value.parent] : undefined,
       gitExec: value.gitExec,
     });
   }
@@ -1141,12 +1231,41 @@ export class Commit {
     });
     const oid = await args.gitExec.buildCommitHash({
       message: args.message,
-      treeOid,
+      treeOid: treeOid,
     });
     return new Commit({
       ...args,
       oid,
     });
+  }
+
+  async walkParents(callback: (commit: Commit) => Promise<boolean> | boolean) {
+    const parents = this.parents;
+    if (!parents) {
+      return;
+    }
+    const parentOid = parents[0];
+    const parent = await this.db.query.commits.findFirst({
+      where: (fields, ops) => ops.eq(fields.oid, parentOid),
+    });
+    if (parent) {
+      const parentCommit = await Commit.fromRecord({
+        repoName: this.repoName,
+        orgName: this.orgName,
+        db: this.db,
+        content: parent.content,
+        oid: parent.oid,
+        tree: parent.tree,
+        parent: parent.parent,
+        gitExec: this.gitExec,
+      });
+      const callbackResult = await callback(parentCommit);
+      if (!callbackResult) {
+        await parentCommit.walkParents(callback);
+      }
+    } else {
+      throw new Error(`No parent found for commit ${this.oid}`);
+    }
   }
 
   getEntryForPath(path: string) {
@@ -1277,3 +1396,39 @@ export function mergeFile({
   }
   return { cleanMerge, mergedText };
 }
+
+export const changesSchema = z.object({
+  orgName: z.string(),
+  repoName: z.string(),
+  branchName: z.string(),
+  changes: z.array(
+    z.object({
+      added: z.array(
+        z.object({
+          path: z.string(),
+          theirOid: z.string(),
+        })
+      ),
+      deleted: z.array(
+        z.object({
+          path: z.string(),
+          baseOid: z.string(),
+          ourOid: z.string().nullish(),
+        })
+      ),
+      modified: z.array(
+        z.object({
+          path: z.string(),
+          ourOid: z.string().nullish(),
+          baseOid: z.string(),
+          theirOid: z.string(),
+        })
+      ),
+      commit: z.object({
+        message: z.string(),
+        oid: z.string(),
+      }),
+      blobs: z.record(z.string()),
+    })
+  ),
+});

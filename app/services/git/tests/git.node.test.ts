@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GitServer } from "../git.server";
+import { GitServer } from "../git.node";
 import { common } from "./common";
 
 describe("shared logic with browser", async () => {

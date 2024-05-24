@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c4b9a3f8-86ba-42cc-b859-311a67e17d13",
+  "id": "216b81a9-418e-4cfc-b4c9-715817323c6f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "blobs": {
@@ -233,6 +233,13 @@
         },
         "repo_name": {
           "name": "repo_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "remote_source": {
+          "name": "remote_source",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

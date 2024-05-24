@@ -1,7 +1,8 @@
 import { TreeType } from "./types";
 import { sep } from "path";
 import type { ReadCommitResult } from "isomorphic-git";
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
+import shasum from "shasum";
 
 export class GitBase {
   async hash(bufferOrString: Buffer | string): Promise<string> {
@@ -15,11 +16,16 @@ export class GitBase {
   }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async _hash(buffer: Buffer): Promise<string> {
-    throw new Error(`Not implemented`);
+    // Calling toString() seems to ensure that node/browser are identical
+    const result = await shasum(buffer.toString());
+    return result;
   }
 
   async hashBlob(string: string) {
-    return this.hash(this.wrap({ type: "blob", bufferOrString: string }));
+    const result = await this.hash(
+      this.wrap({ type: "blob", bufferOrString: string })
+    );
+    return result;
   }
 
   wrap({

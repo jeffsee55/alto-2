@@ -135,7 +135,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </li>
                   <li>
                     <Link
-                      to={"/config/database"}
+                      to={"/repos/config/database"}
                       className={clsx(
                         // eslint-disable-next-line no-constant-condition
                         false

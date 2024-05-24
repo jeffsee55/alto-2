@@ -3,13 +3,19 @@ import { SQLocalDrizzle } from "sqlocal/drizzle";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { schema } from "~/services/git/schema";
 
-const getAlto = () => {
+export const getAlto = () => {
   if (!window.altoLocalSqlite) {
     console.log("Creating new SQLocalDrizzle");
-    window.altoLocalSqlite = new SQLocalDrizzle("migrations-test.sqlite3");
+    const altoLocalSqlite = new SQLocalDrizzle("migrations-test.sqlite3");
+    window.altoLocalSqlite = altoLocalSqlite;
   }
   const db = drizzle(window.altoLocalSqlite.driver, { schema });
-  return { db, getDatabaseFile: window.altoLocalSqlite.getDatabaseFile };
+
+  return {
+    db,
+    getDatabaseFile: window.altoLocalSqlite.getDatabaseFile,
+    createCallbackFunction: window.altoLocalSqlite.createCallbackFunction,
+  };
 };
 
 if (typeof window !== "undefined") {
