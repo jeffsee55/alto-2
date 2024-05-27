@@ -166,7 +166,7 @@ describe("syncing", async () => {
     expect(branchFromBrowser.commitOid).toEqual(branchFromNode.commitOid);
   });
   describe("when the remote has changes", () => {
-    it("does a not sync, and presents information about pulling changes", async () => {
+    it("does a not sync when it's behind the remote", async () => {
       const { branchFromBrowser, branchFromNode } = await setup2();
 
       await branchFromBrowser.upsert({
@@ -192,6 +192,35 @@ describe("syncing", async () => {
       await expect(
         async () => await branchFromNode.syncChanges(changes)
       ).rejects.toThrowError(GitError);
+
+      // The remote is ahead, so we'll prompt the user to pull those
+      // changes in, if they want. This is where I'm confused, I need
+      // to do a fast-forward merge here, I guess. Do I want/need
+      // the merge commit? And then, when I push my changes again
+      // the merge base won't be right, will it?
+      await branchFromBrowser.syncChanges({
+        direction: "ahead",
+        changes: changes.changes,
+      });
+
+      const result = await branchFromBrowser.find({
+        path: "content/movies/movie2.json",
+      });
+      expect(result?.item.blob.content).toEqual("this is a movie, too");
+
+      // The result here is totally wrong because our commits
+      // have different parents lineage than the server (since)
+      // we haven't yet synced our changes with the server.
+      // I think this is where merge commits plays a valuable
+      // role, and supporting logic for 2 parents needs to
+      // be addressed.
+      const changes3 = await branchFromBrowser.changesSince2(
+        branchFromNode.commitOid,
+        async (commit) => {
+          return branchFromNode.changesSince(commit.oid);
+        }
+      );
+      // console.dir(changes3, { depth: null });
     });
   });
 });
