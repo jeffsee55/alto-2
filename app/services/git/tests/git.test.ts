@@ -60,6 +60,24 @@ describe("clone", async () => {
       branchName: "main",
     });
   });
+  it("cloning creates a remote branch and local branch", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+      exec: new GitServer(),
+    });
+
+    console.log(repo.getBranch({ branchName: "main" }));
+    console.log(repo.getBranch({ branchName: "origin/main" }));
+  });
   it("cloning another branch only results in a delta update", async () => {
     const { db } = await setup({
       sqliteUrl: TEST_SQLITE,
@@ -86,6 +104,93 @@ describe("clone", async () => {
     // expect blobs_to_branches to have a path for "content/actors/actor6.md"
     // expect to find it on feat-1
     // expect content/actors/actor5.md not to have been called for upsert
+  });
+  it("finds the merge base", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+      exec: new GitServer(),
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const baseCommit = await branch.currentCommit();
+    const campaignBranch = await branch.checkoutNewBranch({
+      newBranchName: "summer-campaign",
+    });
+    await branch.upsert({
+      content: "hello from main",
+      path: "content/movies/movie2.json",
+    });
+    await campaignBranch.upsert({
+      content: "hello, from campaign",
+      path: "content/movies/movie1.json",
+    });
+    const baseCommit2 = await branch.findBaseCommit(campaignBranch.commitOid);
+    expect(baseCommit.oid).toEqual(baseCommit2.oid);
+  });
+  it("finds the merge base after having updated the target", async () => {
+    const { db } = await setup({
+      sqliteUrl: TEST_SQLITE,
+      repoPath: movieRepoPath,
+      // repoPath: largeRepoPath,
+    });
+
+    const repo = await Repo.clone({
+      ...movieRepoConfig,
+      db,
+      dir: movieRepoPath,
+      branchName: "main",
+      exec: new GitServer(),
+    });
+
+    const branch = await repo.getBranch({ branchName: "main" });
+    const baseCommit = await branch.currentCommit();
+    const campaignBranch = await branch.checkoutNewBranch({
+      newBranchName: "summer-campaign",
+    });
+    await branch.upsert({
+      content: "hello from main",
+      path: "content/movies/movie2.json",
+    });
+    await campaignBranch.upsert({
+      content: "hello, from campaign",
+      path: "content/movies/movie1.json",
+    });
+    const baseCommit2 = await branch.findBaseCommit(campaignBranch.commitOid);
+    expect(baseCommit.oid).toEqual(baseCommit2.oid);
+    const movie2a = await campaignBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(movie2a?.item.blob.content).not.toEqual("hello from main");
+    await campaignBranch.merge(branch);
+
+    const movie2b = await campaignBranch.find({
+      path: "content/movies/movie2.json",
+    });
+    expect(movie2b?.item.blob.content).toEqual("hello from main");
+
+    const movie1a = await branch.find({
+      path: "content/movies/movie1.json",
+    });
+    expect(movie1a?.item.blob.content).not.toEqual("hello, from campaign");
+    await branch.merge(campaignBranch);
+
+    const movie1b = await campaignBranch.find({
+      path: "content/movies/movie1.json",
+    });
+    expect(movie1b?.item.blob.content).toEqual("hello, from campaign");
+
+    // const baseCommit3 = await branch.findBaseCommit(campaignBranch.commitOid);
+    const diffs = await branch.diff(campaignBranch);
+    // console.log(diffs);
   });
   it("works", async () => {
     const { db } = await setup({

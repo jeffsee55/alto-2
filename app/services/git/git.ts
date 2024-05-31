@@ -473,6 +473,10 @@ export class Repo {
       branchName: args.branchName,
       commitOid: await firstCommit.oid,
     });
+    await this.findOrCreateBranch({
+      branchName: `origin/${args.branchName}`,
+      commitOid: await firstCommit.oid,
+    });
     return this;
   }
 
@@ -683,6 +687,27 @@ WHERE ${table.branchName} = ${this.branchName};`;
       }
     }
   }
+
+  async findMergeBase(args: { branch: Branch }): Commit {
+    const currentCommit = await this.currentCommit();
+    let commmonCommit: Commit | null = null;
+    await currentCommit.walkParents(async (commit) => {
+      const otherBranchCommit = await args.branch.currentCommit();
+      await otherBranchCommit.walkParents(async (otherCommit) => {
+        if (otherCommit.oid === commit.oid) {
+          commmonCommit = commit;
+          return true;
+        }
+        return false;
+      });
+      return false;
+    });
+    if (!commmonCommit) {
+      throw new Error("Unable to find merge base");
+    }
+    return commmonCommit;
+  }
+
   /**
    * This could be an expensive operation, if the remote is ahead of
    * the client it will walk commits. Walking the parents of each
@@ -695,26 +720,35 @@ WHERE ${table.branchName} = ${this.branchName};`;
   ): Promise<{
     direction: "ahead" | "behind";
     changes: Awaited<ReturnType<Branch["changesSince"]>>;
+    ahead: Awaited<ReturnType<Branch["changesSince"]>>;
+    behind: Awaited<ReturnType<Branch["changesSince"]>>;
   }> {
     const changesSince = await this.changesSince(commitOid);
     if (changesSince.length > 0) {
       return {
         direction: "ahead",
         changes: await this.changesSince(commitOid),
+        ahead: await this.changesSince(commitOid),
+        behind: [],
       };
     } else {
       const changesResult: {
         direction: "ahead" | "behind";
         changes: Awaited<ReturnType<Branch["changesSince"]>>;
+        ahead: Awaited<ReturnType<Branch["changesSince"]>>;
+        behind: Awaited<ReturnType<Branch["changesSince"]>>;
       } = {
         direction: "behind",
         changes: [],
+        ahead: [],
+        behind: [],
       };
-      const commitFromBrowser = await this.currentCommit();
-      await commitFromBrowser.walkParents(async (commit) => {
+      const currentCommit = await this.currentCommit();
+      await currentCommit.walkParents(async (commit) => {
         const changes2 = await callback(commit);
         if (changes2.length > 0) {
           changesResult.changes = changes2;
+          changesResult.behind = changes2;
           return true;
         }
         return false;
@@ -1322,6 +1356,52 @@ export class Commit {
     } else {
       throw new Error(`No parent found for commit ${this.oid}`);
     }
+  }
+
+  async createCommitLineage(
+    changes: Awaited<ReturnType<Branch["changesSince"]>>
+  ): Promise<Commit> {
+    let latestCommit: Commit = this;
+    for await (const change of changes) {
+      let message = ``;
+      const tree = this.tree;
+      try {
+        for await (const modified of change.modified) {
+          message += `${message ? "\n" : ""}Autosave of ${modified.path}`;
+          GitExec.updateTree({
+            blobOid: modified.theirOid,
+            tree,
+            path: modified.path,
+          });
+        }
+        for await (const added of change.added) {
+          message += `${message ? "\n" : ""}Autosave of ${added.path}`;
+          GitExec.updateTree({
+            blobOid: added.theirOid,
+            tree,
+            path: added.path,
+          });
+        }
+        for await (const deleted of change.deleted) {
+          message += `${message ? "\n" : ""}Deleted ${deleted.path}`;
+          GitExec.removeFromTree({ tree, path: deleted.path });
+        }
+      } catch (e) {
+        // Don't worry about mutations retrying (for now)
+      }
+      const commit = await Commit.build({
+        orgName: this.orgName,
+        repoName: this.repoName,
+        db: this.db,
+        message,
+        tree,
+        gitExec: this.gitExec,
+        parents: [latestCommit.oid],
+      });
+      await commit.save();
+      latestCommit = commit;
+    }
+    return latestCommit;
   }
 
   getEntryForPath(path: string) {

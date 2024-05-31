@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
-import { Repo, movieRepoPath, movieRepoConfig, GitError } from "../git";
+import { Repo, movieRepoPath, movieRepoConfig } from "../git";
 import { loadDatabase } from "../database";
 import { GitServer } from "../git.node";
 import { migrate } from "drizzle-orm/libsql/migrator";
@@ -168,6 +168,9 @@ describe("syncing", async () => {
   describe("when the remote has changes", () => {
     it("does a not sync when it's behind the remote", async () => {
       const { branchFromBrowser, branchFromNode } = await setup2();
+      const baseBrowserCommit = await branchFromBrowser.currentCommit();
+      const baseNodeCommit = await branchFromNode.currentCommit();
+      expect(baseBrowserCommit.oid).toEqual(baseNodeCommit.oid);
 
       await branchFromBrowser.upsert({
         content: "this is a movie",
@@ -177,36 +180,59 @@ describe("syncing", async () => {
         content: "this is a movie, too",
         path: "content/movies/movie2.json",
       });
+      await branchFromNode.upsert({
+        content: "another one",
+        path: "content/movies/movie3.json",
+      });
 
-      const changes = await branchFromBrowser.changesSince2(
-        branchFromNode.commitOid,
-        async (commit) => {
-          return branchFromNode.changesSince(commit.oid);
-        }
-      );
+      const mergeBaseCommit = await branchFromBrowser.findMergeBase({
+        branch: branchFromNode,
+      });
+      expect(mergeBaseCommit.oid).toEqual(baseBrowserCommit.oid);
 
-      expect(changes.direction).toEqual("behind");
-      expect(changes.changes[0].modified[0].path).toEqual(
-        "content/movies/movie2.json"
+      const changes3 = await branchFromBrowser.changesSince(
+        mergeBaseCommit.oid
       );
-      await expect(
-        async () => await branchFromNode.syncChanges(changes)
-      ).rejects.toThrowError(GitError);
+      const changes4 = await branchFromNode.changesSince(mergeBaseCommit.oid);
+      const diffs = {
+        ahead: changes3,
+        behind: changes4,
+      };
+
+      const latestCommit = await mergeBaseCommit.createCommitLineage(
+        diffs.behind
+      );
+      // console.log(latestCommit);
+
+      // for await (const change of diffs.behind) {
+      //   console.dir(change, { depth: null });
+      // }
+
+      // console.dir(diffs, { depth: null });
+
+      // expect(changes.direction).toEqual("behind");
+      // expect(changes.behind[0].modified[0].path).toEqual(
+      //   "content/movies/movie2.json"
+      // );
+      // console.dir(changes, { depth: null });
+      // await expect(
+      //   async () => await branchFromNode.syncChanges(changes)
+      // ).rejects.toThrowError(GitError);
 
       // The remote is ahead, so we'll prompt the user to pull those
       // changes in, if they want. This is where I'm confused, I need
       // to do a fast-forward merge here, I guess. Do I want/need
       // the merge commit? And then, when I push my changes again
       // the merge base won't be right, will it?
-      await branchFromBrowser.syncChanges({
-        direction: "ahead",
-        changes: changes.changes,
-      });
+      // await branchFromBrowser.syncChanges({
+      //   direction: "ahead",
+      //   changes: changes.changes,
+      // });
 
-      const result = await branchFromBrowser.find({
-        path: "content/movies/movie2.json",
-      });
-      expect(result?.item.blob.content).toEqual("this is a movie, too");
+      // const result = await branchFromBrowser.find({
+      //   path: "content/movies/movie2.json",
+      // });
+      // expect(result?.item.blob.content).toEqual("this is a movie, too");
 
       // The result here is totally wrong because our commits
       // have different parents lineage than the server (since)
@@ -214,13 +240,28 @@ describe("syncing", async () => {
       // I think this is where merge commits plays a valuable
       // role, and supporting logic for 2 parents needs to
       // be addressed.
-      const changes3 = await branchFromBrowser.changesSince2(
-        branchFromNode.commitOid,
+
+      // EDIT: I think the what I'm trying to accomplish is that
+      // the server never even does this kind of merge, like a real git-server
+      // if the push from the client is behind, we need to pull again
+      // and try to create a merge commit. Right now we don't store
+      // a remote ref, but we could if it made more sense to do so.
+      // We can merge on the server, but only between 2 different branches
+      const c = await branchFromNode.changesSince2(
+        branchFromBrowser.commitOid,
         async (commit) => {
-          return branchFromNode.changesSince(commit.oid);
+          return branchFromBrowser.changesSince(commit.oid);
         }
       );
-      // console.dir(changes3, { depth: null });
+      // console.dir(c, { depth: null });
+      // await branchFromNode.syncChanges({
+      //   direction: "ahead",
+      //   changes: changes.changes,
+      // });
+      // const b = await branchFromNode.find({
+      //   path: "content/movies/movie1.json",
+      // });
+      // expect(b?.item.blob.content).toEqual("this is a movie");
     });
   });
 });
