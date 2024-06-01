@@ -254,9 +254,13 @@ export class GitExec {
     return result;
   }
 
+  // Probably not the best idea, no idea what kind of memory usage
+  // deep copies will result in but might be worth looking into
   static updateTree(args: { tree: TreeType; path: string; blobOid: string }) {
+    const tree = JSON.parse(JSON.stringify(args.tree));
+    // const tree = args.tree;
     const pathParts = args.path.split(sep);
-    let currentEntry = args.tree;
+    let currentEntry = tree;
     pathParts.forEach((part, i) => {
       let entry = currentEntry.entries[part];
       if (!entry) {
@@ -298,12 +302,13 @@ export class GitExec {
         currentEntry = entry;
       }
     });
-    return args.tree;
+    return tree;
   }
 
   static removeFromTree(args: { tree: TreeType; path: string }) {
+    const tree = JSON.parse(JSON.stringify(args.tree));
     const pathParts = args.path.split(sep);
-    let currentEntry = args.tree;
+    let currentEntry = tree;
     pathParts.forEach((part) => {
       const entry = currentEntry.entries[part];
       if (!entry) throw new Error(`Unable to find entry for path ${args.path}`);
@@ -314,7 +319,7 @@ export class GitExec {
         currentEntry = entry;
       }
     });
-    return args.tree;
+    return tree;
   }
 
   buildCommitHash(args: { message: string; treeOid: string }) {
@@ -688,7 +693,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
     }
   }
 
-  async findMergeBase(args: { branch: Branch }): Commit {
+  async findMergeBase(args: { branch: Branch }): Promise<Commit> {
     const currentCommit = await this.currentCommit();
     let commmonCommit: Commit | null = null;
     await currentCommit.walkParents(async (commit) => {
@@ -767,6 +772,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
       commit: {
         message: string;
         oid: string;
+        tree: TreeType;
+        parents?: string[];
       };
       blobs: Record<string, string>;
     })[] = [];
@@ -801,7 +808,12 @@ WHERE ${table.branchName} = ${this.branchName};`;
       commitsToSync.push(parentCommit);
       diffs.push({
         ...diffs2,
-        commit: { message: currentCommit.content, oid: currentCommit.oid },
+        commit: {
+          message: currentCommit.content,
+          oid: currentCommit.oid,
+          tree: currentCommit.tree,
+          parents: currentCommit.parents,
+        },
         blobs,
       });
       if (parentCommit.oid === commitOid) {
@@ -951,25 +963,26 @@ WHERE ${table.branchName} = ${this.branchName};`;
     }
 
     const isFastForward = diff.baseOid === this.commitOid;
+    let tree = currentCommit.tree;
     if (isFastForward) {
       this.commitOid = branchToMerge.commitOid;
     } else {
       for await (const { path, theirOid } of diff.added) {
-        GitExec.updateTree({
-          tree: currentCommit.tree,
+        tree = GitExec.updateTree({
+          tree,
           path,
           blobOid: theirOid,
         });
       }
       for await (const { path, theirOid } of diff.modified) {
-        GitExec.updateTree({
-          tree: currentCommit.tree,
+        tree = GitExec.updateTree({
+          tree,
           path,
           blobOid: theirOid,
         });
       }
       for await (const { path } of diff.deleted) {
-        GitExec.removeFromTree({ tree: currentCommit.tree, path });
+        tree = GitExec.removeFromTree({ tree, path });
       }
 
       const commit = await Commit.build({
@@ -1065,8 +1078,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
   async delete(args: { path: string }) {
     const currentCommit = await this.currentCommit();
 
-    const tree = currentCommit.tree;
-    GitExec.removeFromTree({ tree, path: args.path });
+    let tree = currentCommit.tree;
+    tree = GitExec.removeFromTree({ tree, path: args.path });
 
     const commit = await Commit.build({
       orgName: this.orgName,
@@ -1111,8 +1124,8 @@ WHERE ${table.branchName} = ${this.branchName};`;
 
     const blobOid = await this.gitExec.exec.hashBlob(args.content);
 
-    const tree = currentCommit.tree;
-    GitExec.updateTree({ blobOid, tree, path: args.path });
+    let tree = currentCommit.tree;
+    tree = GitExec.updateTree({ blobOid, tree, path: args.path });
 
     const commit = await Commit.build({
       orgName: this.orgName,
@@ -1358,33 +1371,134 @@ export class Commit {
     }
   }
 
+  async createMergeCommit(
+    mergeBaseCommit: Commit,
+    theirCommit: Commit,
+    branchToLink?: Branch
+  ) {
+    const change = this.gitExec.findDiffs({
+      ourTree: this.tree,
+      theirTree: theirCommit.tree,
+      baseTree: mergeBaseCommit.tree,
+    });
+    let tree = this.tree;
+    let message = `Merge of ${this.oid.slice(0, 7)} and ${theirCommit.oid.slice(
+      0,
+      7
+    )}`;
+
+    for await (const modified of change.modified) {
+      message += `${message ? "\n" : ""}Autosave of ${modified.path}`;
+      tree = GitExec.updateTree({
+        blobOid: modified.theirOid,
+        tree,
+        path: modified.path,
+      });
+      if (branchToLink) {
+        await this.db
+          .update(tables.blobsToBranches)
+          .set({
+            blobOid: modified.theirOid,
+          })
+          .where(
+            and(
+              eq(tables.blobsToBranches.orgName, this.orgName),
+              eq(tables.blobsToBranches.repoName, this.repoName),
+              eq(tables.blobsToBranches.branchName, branchToLink.branchName),
+              eq(tables.blobsToBranches.path, modified.path)
+            )
+          );
+      }
+    }
+    for await (const added of change.added) {
+      message += `${message ? "\n" : ""}Autosave of ${added.path}`;
+      tree = GitExec.updateTree({
+        blobOid: added.theirOid,
+        tree,
+        path: added.path,
+      });
+
+      if (branchToLink) {
+        await this.db.insert(tables.blobsToBranches).values({
+          orgName: this.orgName,
+          repoName: this.repoName,
+          branchName: branchToLink.branchName,
+          directory: createSortableDirectoryPath(added.path),
+          path: added.path,
+          blobOid: added.theirOid,
+        });
+      }
+    }
+    for await (const deleted of change.deleted) {
+      message += `${message ? "\n" : ""}Deleted ${deleted.path}`;
+      tree = GitExec.removeFromTree({ tree, path: deleted.path });
+      if (branchToLink) {
+        await this.db
+          .delete(tables.blobsToBranches)
+          .where(
+            and(
+              eq(tables.blobsToBranches.orgName, this.orgName),
+              eq(tables.blobsToBranches.repoName, this.repoName),
+              eq(tables.blobsToBranches.branchName, branchToLink.branchName),
+              eq(tables.blobsToBranches.path, deleted.path)
+            )
+          );
+      }
+    }
+    const commit = await Commit.build({
+      orgName: this.orgName,
+      repoName: this.repoName,
+      db: this.db,
+      message,
+      tree,
+      gitExec: this.gitExec,
+      parents: [this.oid, theirCommit.oid],
+    });
+    await commit.save();
+    if (branchToLink) {
+      branchToLink.commitOid = commit.oid;
+      await branchToLink.save();
+    }
+    return commit;
+  }
+
   async createCommitLineage(
     changes: Awaited<ReturnType<Branch["changesSince"]>>
   ): Promise<Commit> {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let latestCommit: Commit = this;
     for await (const change of changes) {
       let message = ``;
-      const tree = this.tree;
+      let tree = latestCommit.tree;
       try {
+        // TODO: I think I still need to create the blobs!
         for await (const modified of change.modified) {
           message += `${message ? "\n" : ""}Autosave of ${modified.path}`;
-          GitExec.updateTree({
+          tree = GitExec.updateTree({
             blobOid: modified.theirOid,
             tree,
             path: modified.path,
           });
+          await this.db.insert(tables.blobs).values({
+            oid: modified.theirOid,
+            content: change.blobs[modified.theirOid],
+          });
         }
         for await (const added of change.added) {
           message += `${message ? "\n" : ""}Autosave of ${added.path}`;
-          GitExec.updateTree({
+          tree = GitExec.updateTree({
             blobOid: added.theirOid,
             tree,
             path: added.path,
           });
+          await this.db.insert(tables.blobs).values({
+            oid: added.theirOid,
+            content: change.blobs[added.theirOid],
+          });
         }
         for await (const deleted of change.deleted) {
           message += `${message ? "\n" : ""}Deleted ${deleted.path}`;
-          GitExec.removeFromTree({ tree, path: deleted.path });
+          tree = GitExec.removeFromTree({ tree, path: deleted.path });
         }
       } catch (e) {
         // Don't worry about mutations retrying (for now)
@@ -1398,6 +1512,9 @@ export class Commit {
         gitExec: this.gitExec,
         parents: [latestCommit.oid],
       });
+      if (commit.oid !== change.commit.oid) {
+        throw new Error(`Invalid commit lineage!`);
+      }
       await commit.save();
       latestCommit = commit;
     }
@@ -1411,8 +1528,11 @@ export class Commit {
   async save() {
     // Only dealing with single parent commits for now
     const parentOid = this.parents ? this.parents[0] : undefined;
+    const secondParentOid = this.parents ? this.parents[1] : undefined;
 
-    const extra: Record<"parent", string> | Record<string, unknown> = {};
+    const extra:
+      | Record<"parent" | "secondParent", string>
+      | Record<string, unknown> = {};
     if (parentOid) {
       const parent = await this.db.query.commits.findFirst({
         where: (fields, ops) => ops.eq(fields.oid, parentOid),
@@ -1420,6 +1540,15 @@ export class Commit {
       });
       if (parent) {
         extra["parent"] = parent.oid;
+      }
+    }
+    if (secondParentOid) {
+      const secondParent = await this.db.query.commits.findFirst({
+        where: (fields, ops) => ops.eq(fields.oid, secondParentOid),
+        columns: { oid: true },
+      });
+      if (secondParent) {
+        extra["secondParent"] = secondParent.oid;
       }
     }
 
@@ -1563,6 +1692,8 @@ export const changesSchema = z.object({
       commit: z.object({
         message: z.string(),
         oid: z.string(),
+        tree: z.record(z.any()),
+        parents: z.array(z.string()).nullish(),
       }),
       blobs: z.record(z.string()),
     })

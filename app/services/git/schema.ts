@@ -43,6 +43,7 @@ export const commits = sqliteTable("commits", {
   content: text("content").notNull(),
   tree: text("tree").notNull(),
   parent: text("parent"),
+  secondParent: text("second_parent"),
 });
 
 export const commitRelations = relations(commits, ({ one }) => ({

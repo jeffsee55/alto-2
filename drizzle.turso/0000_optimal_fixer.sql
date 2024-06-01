@@ -28,7 +28,8 @@ CREATE TABLE `commits` (
 	`oid` text PRIMARY KEY NOT NULL,
 	`content` text NOT NULL,
 	`tree` text NOT NULL,
-	`parent` text
+	`parent` text,
+	`second_parent` text
 );
 --> statement-breakpoint
 CREATE TABLE `repos` (

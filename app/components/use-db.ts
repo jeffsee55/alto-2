@@ -13,6 +13,10 @@ export const getAlto = () => {
 
   return {
     db,
+    destroy: async () => {
+      await window.altoLocalSqlite.destroy();
+      window.altoLocalSqlite = undefined;
+    },
     getDatabaseFile: window.altoLocalSqlite.getDatabaseFile,
     createCallbackFunction: window.altoLocalSqlite.createCallbackFunction,
   };

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "216b81a9-418e-4cfc-b4c9-715817323c6f",
+  "id": "2781e8c1-eb2b-4148-91ce-cd319ac4a229",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "blobs": {
@@ -210,6 +210,13 @@
         },
         "parent": {
           "name": "parent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "second_parent": {
+          "name": "second_parent",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

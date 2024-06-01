@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { trpc } from "./trpc-client";
 import clsx from "clsx";
 import { Link } from "@remix-run/react";
+import { AlignHorizontalDistributeCenter } from "lucide-react";
 
 const checkDatabaseExists = async () => {
   let exists = true;
@@ -21,7 +22,10 @@ const checkDatabaseExists = async () => {
 };
 
 const setup = async () => {
-  const db = window.getAlto().db;
+  const alto = window.getAlto();
+  await alto.destroy();
+  const alto2 = window.getAlto();
+  const db = alto2.db;
   await db.run(sql`DROP TABLE IF EXISTS blobs`);
   await db.run(sql`DROP TABLE IF EXISTS blobs_to_branches`);
   await db.run(sql`DROP TABLE IF EXISTS branches`);
@@ -56,7 +60,8 @@ const setup = async () => {
         'oid' text PRIMARY KEY NOT NULL,
         'content' text NOT NULL,
         'tree' text NOT NULL,
-        'parent' text
+        'parent' text,
+        'second_parent' text
       );
       CREATE TABLE 'repos' (
         'org_name' text NOT NULL,
@@ -120,26 +125,38 @@ export default function Database() {
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={async () => {
-          // Drop this into https://sqlite.drizzle.studio/
-          const databaseFile = await window.getAlto().getDatabaseFile();
-          const fileUrl = URL.createObjectURL(databaseFile);
-          console.log(fileUrl);
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={async () => {
+            // Drop this into https://sqlite.drizzle.studio/
+            const databaseFile = await window.getAlto().getDatabaseFile();
+            const fileUrl = URL.createObjectURL(databaseFile);
+            console.log(fileUrl);
 
-          const a = document.createElement("a");
-          a.href = fileUrl;
-          a.download = "database.sqlite3";
-          a.click();
-          a.remove();
+            const a = document.createElement("a");
+            a.href = fileUrl;
+            a.download = "database.sqlite3";
+            a.click();
+            a.remove();
 
-          URL.revokeObjectURL(fileUrl);
-        }}
-        className="mb-4 rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-      >
-        Download SQLite file
-      </button>
+            URL.revokeObjectURL(fileUrl);
+          }}
+          className="mb-4 rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        >
+          Download SQLite file
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            await setup();
+            await checkDatabaseExists();
+          }}
+          className="mb-4 rounded bg-gray-700/10 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        >
+          Re-initialize
+        </button>
+      </div>
       <ul>
         {/* <li>Database check {dbExists ? "Exists" : "Not exists"}</li> */}
         {/* Heading */}

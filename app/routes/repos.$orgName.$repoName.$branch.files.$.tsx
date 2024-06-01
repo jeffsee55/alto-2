@@ -9,7 +9,6 @@ import {
 import { z } from "zod";
 import { trpc } from "~/components/trpc-client";
 import { getBranch } from "~/components/use-branch";
-import { GitExec } from "~/services/git/git";
 
 export const headers: HeadersFunction = () => ({
   "Cross-Origin-Embedder-Policy": "require-corp",
