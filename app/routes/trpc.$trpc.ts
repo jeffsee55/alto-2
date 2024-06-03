@@ -2,6 +2,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 // import { createContext } from '~/sercies/git';
 import { appRouter } from "~/services/git/trpc-router";
+import { loadDatabase } from "~/services/git/database";
+
+const { db } = loadDatabase();
 
 export const loader = async (args: LoaderFunctionArgs) => {
   return handleRequest(args);
@@ -14,6 +17,8 @@ function handleRequest(args: LoaderFunctionArgs | ActionFunctionArgs) {
     endpoint: "/trpc",
     req: args.request,
     router: appRouter,
-    // createContext,
+    createContext: () => {
+      return { db };
+    },
   });
 }
