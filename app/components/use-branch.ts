@@ -4,15 +4,11 @@ import { Branch, GitExec } from "~/services/git/git";
 import { GitBrowser } from "~/services/git/git.browser";
 
 export const getBranch = async (params: Readonly<Params<string>>) => {
-  const {
-    orgName,
-    repoName,
-    branch: branchName,
-  } = z
+  const { orgName, repoName, branchName } = z
     .object({
       orgName: z.string(),
       repoName: z.string(),
-      branch: z.string(),
+      branchName: z.string(),
       "*": z.string(),
     })
     .parse(params);

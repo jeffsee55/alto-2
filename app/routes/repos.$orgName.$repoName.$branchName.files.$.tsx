@@ -22,7 +22,7 @@ export const clientAction = async (args: ClientActionFunctionArgs) => {
     .object({
       orgName: z.string(),
       repoName: z.string(),
-      branch: z.string(),
+      branchName: z.string(),
       "*": z.string(),
     })
     .parse(args.params);
@@ -44,13 +44,14 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
     .object({
       orgName: z.string(),
       repoName: z.string(),
-      branch: z.string(),
+      branchName: z.string(),
       "*": z.string(),
     })
     .parse(args.params);
   const branch = await getBranch(args.params);
   const list = await branch.list();
   const item = await branch.find({ path });
+  console.log(item);
   return { list, item };
 };
 
@@ -58,15 +59,11 @@ export default function Page() {
   const [isBrowser, setIsBrowser] = React.useState(false);
   const clientData = useLoaderData<typeof clientLoader>();
   const params = useParams();
-  const {
-    orgName,
-    repoName,
-    branch: branchName,
-  } = z
+  const { orgName, repoName, branchName } = z
     .object({
       orgName: z.string(),
       repoName: z.string(),
-      branch: z.string(),
+      branchName: z.string(),
       "*": z.string(),
     })
     .parse(params);
@@ -80,7 +77,7 @@ export default function Page() {
       });
       const branch = await getBranch(params);
       if (check.commitOid === branch.commitOid) {
-        console.log("all good");
+        // console.log("all good");
       } else {
         const diffs = await branch.changesSince(check.commitOid);
 

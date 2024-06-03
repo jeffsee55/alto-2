@@ -7,6 +7,9 @@ export default {
       fontFamily: {
         display: "Raleway, Oswald, ui-serif", // Adds a new `font-display` class
       },
+      animation: {
+        "ping-slow": "ping 3s linear infinite",
+      },
     },
   },
   plugins: [],

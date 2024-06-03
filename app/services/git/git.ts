@@ -693,6 +693,33 @@ WHERE ${table.branchName} = ${this.branchName};`;
     }
   }
 
+  async findMergeBaseCallback(
+    callback: (args: { oid: string }) => Promise<boolean>
+  ): Promise<Commit> {
+    const currentCommit = await this.currentCommit();
+    let commmonCommit: Commit | null = null;
+
+    // const result = await callback({ oid: currentCommit.oid });
+    // console.log("start", result);
+    // if (result) {
+    //   return currentCommit;
+    // }
+    // console.log("i shouldnt run");
+
+    await currentCommit.walkParents(async (commit) => {
+      const result = await callback({ oid: commit.oid });
+      if (result) {
+        commmonCommit = commit;
+        return true;
+      }
+      return false;
+    });
+    if (!commmonCommit) {
+      throw new Error("Unable to find merge base");
+    }
+    return commmonCommit;
+  }
+
   async findMergeBase(args: { branch: Branch }): Promise<Commit> {
     const currentCommit = await this.currentCommit();
     let commmonCommit: Commit | null = null;
@@ -1515,7 +1542,7 @@ export class Commit {
       if (commit.oid !== change.commit.oid) {
         throw new Error(`Invalid commit lineage!`);
       }
-      await commit.save();
+      await commit.save({ ignoreError: true });
       latestCommit = commit;
     }
     return latestCommit;
@@ -1525,7 +1552,7 @@ export class Commit {
     return GitExec.readFromTree({ tree: this.tree, path });
   }
 
-  async save() {
+  async save(options?: { ignoreError?: boolean }) {
     // Only dealing with single parent commits for now
     const parentOid = this.parents ? this.parents[0] : undefined;
     const secondParentOid = this.parents ? this.parents[1] : undefined;
@@ -1552,12 +1579,17 @@ export class Commit {
       }
     }
 
-    await this.db.insert(tables.commits).values({
+    const args = {
       content: this.content,
       oid: this.oid,
       tree: JSON.stringify(this.tree),
       ...extra,
-    });
+    };
+    if (options?.ignoreError) {
+      await this.db.insert(tables.commits).values(args).onConflictDoNothing();
+    } else {
+      await this.db.insert(tables.commits).values(args);
+    }
   }
 }
 

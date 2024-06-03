@@ -187,10 +187,6 @@ describe("clone", async () => {
       path: "content/movies/movie1.json",
     });
     expect(movie1b?.item.blob.content).toEqual("hello, from campaign");
-
-    // const baseCommit3 = await branch.findBaseCommit(campaignBranch.commitOid);
-    const diffs = await branch.diff(campaignBranch);
-    // console.log(diffs);
   });
   it("works", async () => {
     const { db } = await setup({

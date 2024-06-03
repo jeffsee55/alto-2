@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { trpc } from "./trpc-client";
 import clsx from "clsx";
 import { Link } from "@remix-run/react";
-import { AlignHorizontalDistributeCenter } from "lucide-react";
 
 const checkDatabaseExists = async () => {
   let exists = true;
