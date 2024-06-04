@@ -183,38 +183,22 @@ describe("syncing", async () => {
     // TODO: consolidate this logic so that it can be packaged
     // up for frontend consumption
     it.only("syncs changes between browser 'sessions'", async () => {
-      const { branchFromBrowser, branchFromBrowser2, branchFromNode, trpc } =
-        await setup2();
-      const baseBrowserCommit = await branchFromBrowser.currentCommit();
-      const baseNodeCommit = await branchFromNode.currentCommit();
-      expect(baseBrowserCommit.oid).toEqual(baseNodeCommit.oid);
+      const { branchFromBrowser, branchFromBrowser2, trpc } = await setup2();
 
-      const runQueries = async () => {
-        const itemToModify = await branchFromBrowser.find({
-          path: "content/movies/movie1.json",
-        });
-        const itemToAdd = await branchFromBrowser.find({
-          path: "content/movies/movie13.json",
-        });
-        const itemToDelete = await branchFromBrowser.find({
-          path: "content/movies/movie2.json",
-        });
-        return { itemToModify, itemToAdd, itemToDelete };
-      };
-
-      const { itemToModify, itemToAdd, itemToDelete } = await runQueries();
-      expect(itemToModify?.item.blob.content).not.toEqual("this is a movie");
-      expect(itemToAdd).toBe(null);
-      expect(itemToDelete).not.toBe(null);
+      const orgName = "jeffsee55";
+      const repoName = "movie-content";
+      const branchName = "main";
+      const initialCheck = await trpc.check({
+        orgName,
+        repoName,
+        branchName,
+      });
+      expect(initialCheck.commitOid).toEqual(branchFromBrowser.commitOid);
 
       await branchFromBrowser.upsert({
         content: "this is a movie",
         path: "content/movies/movie1.json",
       });
-
-      const orgName = "jeffsee55";
-      const repoName = "movie-content";
-      const branchName = "main";
 
       const check = await trpc.check({
         orgName,
@@ -222,6 +206,7 @@ describe("syncing", async () => {
         branchName,
       });
       expect(check.commitOid).not.toEqual(branchFromBrowser.commitOid);
+      expect(check.commitOid).toEqual(branchFromBrowser2.commitOid);
 
       const diffs = await branchFromBrowser.changesSince(check.commitOid);
 
@@ -249,11 +234,6 @@ describe("syncing", async () => {
         });
         if (result) {
           if (result.currentCommit === currentCommit.oid) {
-            console.log(
-              "all caught up",
-              currentCommit.content,
-              currentCommit.oid
-            );
             // all caught up
           } else {
             await branchFromBrowser2.syncChanges({
@@ -275,8 +255,7 @@ describe("syncing", async () => {
       expect(check3.commitOid).toEqual(branchFromBrowser2.commitOid);
     });
     it.only("does a not sync when it's behind the remote", async () => {
-      const { branchFromBrowser, branchFromBrowser2, branchFromNode, trpc } =
-        await setup2();
+      const { branchFromBrowser, branchFromNode } = await setup2();
       const baseBrowserCommit = await branchFromBrowser.currentCommit();
       const baseNodeCommit = await branchFromNode.currentCommit();
       expect(baseBrowserCommit.oid).toEqual(baseNodeCommit.oid);
