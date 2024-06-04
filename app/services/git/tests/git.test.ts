@@ -74,9 +74,6 @@ describe("clone", async () => {
       branchName: "main",
       exec: new GitServer(),
     });
-
-    console.log(repo.getBranch({ branchName: "main" }));
-    console.log(repo.getBranch({ branchName: "origin/main" }));
   });
   it("cloning another branch only results in a delta update", async () => {
     const { db } = await setup({

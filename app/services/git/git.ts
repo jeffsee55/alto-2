@@ -699,12 +699,10 @@ WHERE ${table.branchName} = ${this.branchName};`;
     const currentCommit = await this.currentCommit();
     let commmonCommit: Commit | null = null;
 
-    // const result = await callback({ oid: currentCommit.oid });
-    // console.log("start", result);
-    // if (result) {
-    //   return currentCommit;
-    // }
-    // console.log("i shouldnt run");
+    const result = await callback({ oid: currentCommit.oid });
+    if (result) {
+      return currentCommit;
+    }
 
     await currentCommit.walkParents(async (commit) => {
       const result = await callback({ oid: commit.oid });

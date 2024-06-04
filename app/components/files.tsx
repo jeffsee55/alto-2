@@ -106,9 +106,6 @@ const Main = (props: LoaderData) => {
 
   React.useEffect(() => {
     const i = setInterval(async () => {
-      const branchRecord = await window.getAlto().db.query.branches.findFirst({
-        where: (fields, ops) => ops.eq(fields.branchName, "main"),
-      });
       const branch = await getBranch(params);
       const currentCommit = await branch.currentCommit();
       await branch.findMergeBaseCallback(async (commit) => {

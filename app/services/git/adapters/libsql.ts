@@ -10,9 +10,11 @@ const credentials = {
   // authToken: process.env.TURSO_AUTH_TOKEN!,
 };
 
-export const dbSetup = (options?: { memory?: boolean }) => {
+export const dbSetup = (options?: { memory?: boolean; filename?: string }) => {
   const libsql = options?.memory
     ? createClient({ ...credentials, url: ":memory:" })
+    : options?.filename
+    ? createClient({ ...credentials, url: options.filename })
     : createClient(credentials);
 
   const db = drizzle(libsql, { schema: schema });
