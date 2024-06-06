@@ -26,10 +26,15 @@ CREATE TABLE `branches` (
 --> statement-breakpoint
 CREATE TABLE `commits` (
 	`oid` text PRIMARY KEY NOT NULL,
-	`content` text NOT NULL,
+	`message` text NOT NULL,
 	`tree` text NOT NULL,
+	`tree_oid` text NOT NULL,
 	`parent` text,
-	`second_parent` text
+	`second_parent` text,
+	`author_name` text NOT NULL,
+	`author_email` text NOT NULL,
+	`timestamp` integer NOT NULL,
+	`timezone_offset` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `repos` (

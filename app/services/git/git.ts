@@ -661,6 +661,13 @@ WHERE ${table.branchName} = ${this.branchName};`;
     await this.db.run(statement);
     return newBranch;
   }
+  async pull(changes: z.infer<typeof changesSchema>["changes"]) {
+    return this.syncChanges({
+      direction: "ahead",
+      changes: changes,
+    });
+  }
+
   async syncChanges(args: {
     direction: "ahead" | "behind";
     changes: z.infer<typeof changesSchema>["changes"];
@@ -693,29 +700,43 @@ WHERE ${table.branchName} = ${this.branchName};`;
     }
   }
 
-  async findMergeBaseCallback(
-    callback: (args: { oid: string }) => Promise<boolean>
-  ): Promise<Commit> {
+  async walkCommits(
+    callback: (args: { oid: string }) => Promise<{
+      commitOid: string;
+      changes: Awaited<ReturnType<Branch["changesSince"]>>;
+    }>
+  ): Promise<void> {
     const currentCommit = await this.currentCommit();
-    let commmonCommit: Commit | null = null;
 
     const result = await callback({ oid: currentCommit.oid });
-    if (result) {
-      return currentCommit;
+
+    if (!result) {
+      // we don't have this in our lineage, move
+      await currentCommit.walkParents(async (commit) => {
+        const result = await callback({ oid: commit.oid });
+        // console.log("serach parents", this.commitOid, result?.commitOid);
+        if (result?.changes.length > 0) {
+          // we need to move back to that commit and catch
+          // up the history
+          const commit = await Commit.fromQuery({
+            db: this.db,
+            oid: result.commitOid,
+            orgName: this.orgName,
+            repoName: this.repoName,
+            gitExec: this.gitExec,
+          });
+          const latestCommit = await commit.createCommitLineage(result.changes);
+          const currentCommit = await this.currentCommit();
+          await currentCommit.createMergeCommit(commit, latestCommit, this);
+          return true;
+        }
+        return false;
+      });
     }
 
-    await currentCommit.walkParents(async (commit) => {
-      const result = await callback({ oid: commit.oid });
-      if (result) {
-        commmonCommit = commit;
-        return true;
-      }
-      return false;
-    });
-    if (!commmonCommit) {
-      throw new Error("Unable to find merge base");
+    if (result?.changes.length > 0) {
+      await this.pull(result.changes);
     }
-    return commmonCommit;
   }
 
   async findMergeBase(args: { branch: Branch }): Promise<Commit> {
@@ -792,7 +813,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
   ): Promise<z.infer<typeof changesSchema>["changes"]> {
     let currentCommit = await this.currentCommit();
     let foundParent = false;
-    const commitsToSync = [currentCommit];
+    // const commitsToSync = [currentCommit];
     const diffs: (ReturnType<GitExec["findDiffs"]> & {
       commit: {
         message: string;
@@ -830,7 +851,7 @@ WHERE ${table.branchName} = ${this.branchName};`;
         // await branch.gitExec.exec.hashBlob(value);
         blobs[diff.theirOid] = value;
       }
-      commitsToSync.push(parentCommit);
+      // commitsToSync.push(parentCommit);
       diffs.push({
         ...diffs2,
         commit: {
@@ -1318,8 +1339,29 @@ export class Commit {
     this.content = args.message;
     this.tree = args.tree;
     this.gitExec = args.gitExec;
+    console.log("parents", args.parents);
     this.parents = args.parents;
     this.oid = args.oid;
+  }
+
+  static async fromQuery(args: {
+    repoName: string;
+    orgName: string;
+    db: DB;
+    gitExec: GitExec;
+    oid: string;
+  }) {
+    const record = await args.db.query.commits.findFirst({
+      where: (fields, ops) => ops.and(ops.eq(fields.oid, args.oid)),
+    });
+    if (!record) {
+      throw new Error(`Unable to find commit with oid ${args.oid}`);
+    }
+
+    return Commit.fromRecord({
+      ...args,
+      ...record,
+    });
   }
 
   static async fromRecord(value: {

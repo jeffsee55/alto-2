@@ -51,7 +51,6 @@ export const clientLoader = async (args: ClientLoaderFunctionArgs) => {
   const branch = await getBranch(args.params);
   const list = await branch.list();
   const item = await branch.find({ path });
-  console.log(item);
   return { list, item };
 };
 
@@ -81,7 +80,7 @@ export default function Page() {
       } else {
         const diffs = await branch.changesSince(check.commitOid);
 
-        await trpc.sync.mutate({
+        await trpc.push.mutate({
           orgName,
           branchName,
           repoName,

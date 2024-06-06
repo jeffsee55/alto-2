@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { Tree, NodeRendererProps } from "react-arborist";
 import { ChevronDownIcon, DotIcon } from "lucide-react";
 import type { BlobType, TreeType } from "~/services/git/types";
-import { Form, Link, useNavigate, useParams } from "@remix-run/react";
+import { Form, Link, useNavigate } from "@remix-run/react";
 import MonacoEditor from "react-monaco-editor";
 import { Branch } from "~/services/git/git";
 import { trpc } from "~/components/trpc-client";
@@ -107,35 +107,13 @@ const Main = (props: LoaderData) => {
   React.useEffect(() => {
     const i = setInterval(async () => {
       const branch = await getBranch(params);
-      const currentCommit = await branch.currentCommit();
-      await branch.findMergeBaseCallback(async (commit) => {
-        const result = await trpc.commitCallback.query({
+      await branch.walkCommits(async (commit) => {
+        return trpc.commitCallback.query({
           ...params,
           commit: { oid: commit.oid },
         });
-        if (result) {
-          if (result.currentCommit === currentCommit.oid) {
-            console.log(
-              "all caught up",
-              currentCommit.content,
-              currentCommit.oid
-            );
-            // all caught up
-          } else {
-            await branch.syncChanges({
-              direction: "ahead",
-              changes: result.changes,
-            });
-            // Reload to trigger data fetch. In reality
-            // if there's an update on the document we're editing
-            // will either need a way to automerge it or prompt the user
-            // to resolve the conflict
-            navigate(`./${params["*"]}`, { replace: true });
-          }
-          return true;
-        }
-        return false;
       });
+      navigate(`./${params["*"]}`, { replace: true });
     }, 500);
     return () => clearInterval(i);
   }, []);

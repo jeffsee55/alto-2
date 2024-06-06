@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2781e8c1-eb2b-4148-91ce-cd319ac4a229",
+  "id": "87ac3523-0127-4d78-b351-8f632e621c6c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "blobs": {
@@ -194,8 +194,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "content": {
-          "name": "content",
+        "message": {
+          "name": "message",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -203,6 +203,13 @@
         },
         "tree": {
           "name": "tree",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tree_oid": {
+          "name": "tree_oid",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -220,6 +227,34 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false,
+          "autoincrement": false
+        },
+        "author_name": {
+          "name": "author_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "author_email": {
+          "name": "author_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "timezone_offset": {
+          "name": "timezone_offset",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
           "autoincrement": false
         }
       },

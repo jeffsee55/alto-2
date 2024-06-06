@@ -1,7 +1,6 @@
 import type { Config } from "drizzle-kit";
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
-import Database from "libsql";
 import { schema } from "~/services/git-2/schema";
 
 const credentials = {
@@ -11,17 +10,12 @@ const credentials = {
   // authToken: process.env.TURSO_AUTH_TOKEN!,
 };
 
-const createClient2 = (args: Parameters<typeof createClient>[0]) => {
-  const db = new Database(args.url);
-  return db;
-};
-
 export const dbSetup = (options?: { memory?: boolean; filename?: string }) => {
   const libsql = options?.memory
-    ? createClient2({ ...credentials, url: ":memory:" })
+    ? createClient({ ...credentials, url: ":memory:" })
     : options?.filename
-    ? createClient2({ ...credentials, url: options.filename })
-    : createClient2(credentials);
+    ? createClient({ ...credentials, url: options.filename })
+    : createClient(credentials);
 
   const db = drizzle(libsql, { schema: schema });
 

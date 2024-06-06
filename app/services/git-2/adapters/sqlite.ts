@@ -4,7 +4,7 @@ import SQLiteDatabase from "better-sqlite3";
 import { schema } from "~/services/git-2/schema";
 
 const credentials = {
-  url: "file:./test.sqlite",
+  url: ":memory:",
 };
 
 export const dbSetup = () => {

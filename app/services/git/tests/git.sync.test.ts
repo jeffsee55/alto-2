@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
 import { Repo, movieRepoPath, movieRepoConfig } from "../git";
@@ -74,6 +74,9 @@ const setup2 = async () => {
 };
 
 describe("syncing", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it("after a modified file", async () => {
     const { branchFromBrowser, branchFromNode } = await setup2();
     expect(branchFromBrowser.commitOid).toEqual(branchFromNode.commitOid);
@@ -180,9 +183,7 @@ describe("syncing", async () => {
     expect(branchFromBrowser.commitOid).toEqual(branchFromNode.commitOid);
   });
   describe("when the remote has changes", () => {
-    // TODO: consolidate this logic so that it can be packaged
-    // up for frontend consumption
-    it.only("syncs changes between browser 'sessions'", async () => {
+    it("syncs changes between browser 'sessions'", async () => {
       const { branchFromBrowser, branchFromBrowser2, trpc } = await setup2();
 
       const orgName = "jeffsee55";
@@ -210,7 +211,7 @@ describe("syncing", async () => {
 
       const diffs = await branchFromBrowser.changesSince(check.commitOid);
 
-      await trpc.sync({
+      await trpc.push({
         orgName,
         branchName,
         repoName,
@@ -224,27 +225,26 @@ describe("syncing", async () => {
 
       expect(check2.commitOid).toEqual(branchFromBrowser.commitOid);
 
-      const currentCommit = await branchFromBrowser2.currentCommit();
-      await branchFromBrowser2.findMergeBaseCallback(async (commit) => {
-        const result = await trpc.commitCallback({
+      const spy = vi.spyOn(branchFromBrowser2, "pull");
+
+      await branchFromBrowser2.walkCommits(async (commit) => {
+        return trpc.commitCallback({
           orgName,
           branchName,
           repoName,
           commit: { oid: commit.oid },
         });
-        if (result) {
-          if (result.currentCommit === currentCommit.oid) {
-            // all caught up
-          } else {
-            await branchFromBrowser2.syncChanges({
-              direction: "ahead",
-              changes: result.changes,
-            });
-          }
-          return true;
-        }
-        return false;
       });
+      // Try twice to test polling logic that runs in the browser
+      await branchFromBrowser2.walkCommits(async (commit) => {
+        return trpc.commitCallback({
+          orgName,
+          branchName,
+          repoName,
+          commit: { oid: commit.oid },
+        });
+      });
+      expect(spy).toHaveBeenCalledOnce();
 
       const check3 = await trpc.check({
         orgName,
@@ -253,6 +253,86 @@ describe("syncing", async () => {
       });
 
       expect(check3.commitOid).toEqual(branchFromBrowser2.commitOid);
+    });
+    it.only("syncs changes between browser 'sessions' when they both have changes", async () => {
+      const { branchFromBrowser, branchFromBrowser2, trpc } = await setup2();
+
+      const orgName = "jeffsee55";
+      const repoName = "movie-content";
+      const branchName = "main";
+      const initialCheck = await trpc.check({
+        orgName,
+        repoName,
+        branchName,
+      });
+      expect(initialCheck.commitOid).toEqual(branchFromBrowser.commitOid);
+
+      await branchFromBrowser.upsert({
+        content: "this is a movie",
+        path: "content/movies/movie1.json",
+      });
+
+      const check = await trpc.check({
+        orgName,
+        repoName,
+        branchName,
+      });
+      expect(check.commitOid).not.toEqual(branchFromBrowser.commitOid);
+      expect(check.commitOid).toEqual(branchFromBrowser2.commitOid);
+
+      const diffs = await branchFromBrowser.changesSince(check.commitOid);
+
+      await trpc.push({
+        orgName,
+        branchName,
+        repoName,
+        changes: diffs,
+      });
+      const check2 = await trpc.check({
+        orgName,
+        repoName,
+        branchName,
+      });
+
+      expect(check2.commitOid).toEqual(branchFromBrowser.commitOid);
+
+      await branchFromBrowser2.upsert({
+        content: "this is a movie",
+        path: "content/movies/movie2.json",
+      });
+
+      await branchFromBrowser2.walkCommits(async (commit) => {
+        return trpc.commitCallback({
+          orgName,
+          branchName,
+          repoName,
+          commit: { oid: commit.oid },
+        });
+      });
+      // Try twice to test polling logic that runs in the browser
+      await branchFromBrowser2.walkCommits(async (commit) => {
+        return trpc.commitCallback({
+          orgName,
+          branchName,
+          repoName,
+          commit: { oid: commit.oid },
+        });
+      });
+
+      const check3 = await trpc.check({
+        orgName,
+        repoName,
+        branchName,
+      });
+      await branchFromBrowser2.upsert({
+        content: "this is a movie and it was changed again",
+        path: "content/movies/movie2.json",
+      });
+      const diffs2 = await branchFromBrowser2.changesSince(check3.commitOid);
+      // console.log(check3);
+      // console.log(diffs2);
+
+      expect(check3.commitOid).not.toEqual(branchFromBrowser2.commitOid);
     });
     it.only("does a not sync when it's behind the remote", async () => {
       const { branchFromBrowser, branchFromNode } = await setup2();
