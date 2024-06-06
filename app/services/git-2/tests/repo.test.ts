@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
-import { it } from "vitest";
+import { expect, it } from "vitest";
 import { tables } from "~/services/git/schema";
 import tmp from "tmp-promise";
 import { FilesystemRepo } from "../repo/filesystem";
+import { TrpcRepo } from "../repo/trpc";
 import { loadDatabase } from "../database";
 // import { migrate } from "drizzle-orm/libsql/migrator";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { LibSQLDatabase } from "drizzle-orm/libsql";
 import { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { createCaller, appRouter } from "../repo/trpc-router";
+import { httpClient } from "../repo/trpc-client";
+// import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
 
 tmp.setGracefulCleanup();
 
@@ -36,13 +41,26 @@ export const setup = async (args?: { memory?: boolean; filename?: string }) => {
 };
 
 it("can clone a repo", async () => {
-  // const { db: clientDB } = await setup({ memory: true });
-  // const { db: serverDB } = await setup({ memory: true });
   const { db: serverDB } = await setup();
-  const { branch } = await FilesystemRepo.clone({
+  const { db: browserDB } = await setup();
+
+  const { repo, branch } = await FilesystemRepo.clone({
     db: serverDB,
     dir: movieRepoPath,
-    branch: "main",
+    orgName: "jeffsee55",
+    repoName: "movie-content",
+    branchName: "main",
   });
-  console.log("hi!", await branch.currentCommit());
+  expect(await branch.currentCommit()).toBeDefined();
+
+  const caller = createCaller({ repo });
+
+  const { branch: branchFromBrowser } = await TrpcRepo.clone({
+    db: browserDB,
+    trpc: caller,
+    orgName: "jeffsee55",
+    repoName: "movie-content",
+    branchName: "main",
+  });
+  expect(branchFromBrowser).toBeDefined();
 });

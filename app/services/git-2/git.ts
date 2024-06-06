@@ -18,6 +18,16 @@ export class Repo {
   dbInfo(): { orgName: string; repoName: string } {
     throw new Error(`Not implemented`);
   }
+  async resolveRef(args: {
+    orgName: string;
+    repoName: string;
+    branchName: string;
+  }): Promise<string> {
+    throw new Error(`Not implemented`);
+  }
+  async readCommit(args: { oid: string }): Promise<any> {
+    throw new Error(`Not implemented`);
+  }
 
   async clone() {
     throw new Error(`Not implemented`);
@@ -99,7 +109,52 @@ export class Commit {
     this.timezoneOffset = args.timezoneOffset;
   }
 
+  static fromJSON(
+    repo: Repo,
+    json: {
+      tree: string;
+      message: string;
+      oid: string;
+      treeOid: string;
+      parent: string | null;
+      secondParent: string | null;
+      authorName: string;
+      authorEmail: string;
+      timestamp: number;
+      timezoneOffset: number;
+    }
+  ) {
+    return new Commit({
+      repo: repo,
+      tree: treeSchema.parse(JSON.parse(json.tree)),
+      message: json.message,
+      oid: json.oid,
+      treeOid: json.treeOid,
+      parents: [json.parent, json.secondParent].filter(Boolean),
+      authorName: json.authorName,
+      authorEmail: json.authorEmail,
+      timestamp: json.timestamp,
+      timezoneOffset: json.timezoneOffset,
+    });
+  }
+
+  toJSON() {
+    return {
+      tree: JSON.stringify(this.tree),
+      message: this.message,
+      oid: this.oid,
+      treeOid: this.treeOid,
+      parent: this.parent,
+      secondParent: this.seondParent,
+      authorName: this.authorName,
+      authorEmail: this.authorEmail,
+      timestamp: this.timestamp,
+      timezoneOffset: this.timezoneOffset,
+    };
+  }
+
   static async find(args: { repo: Repo; commitOid: string }) {
+    const all = await args.repo.db.query.commits.findMany();
     const record = await args.repo.db.query.commits.findFirst({
       where: (f, o) => o.eq(f.oid, args.commitOid),
     });

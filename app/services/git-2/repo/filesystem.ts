@@ -9,13 +9,23 @@ import { Repo, Commit, Branch } from "../git";
 export class FilesystemRepo extends Repo {
   db: DB;
   dir: string;
-  constructor(args: { db: DB; dir: string }) {
+  orgName: string;
+  repoName: string;
+
+  constructor(args: {
+    db: DB;
+    dir: string;
+    orgName: string;
+    repoName: string;
+  }) {
     super(args);
     this.db = args.db;
     this.dir = args.dir;
+    this.orgName = args.orgName;
+    this.repoName = args.repoName;
   }
   dbInfo() {
-    return { orgName: "filesystem", repoName: this.dir };
+    return { orgName: this.orgName, repoName: this.repoName };
   }
   async save() {
     await this.db.insert(tables.repos).values({
@@ -23,13 +33,35 @@ export class FilesystemRepo extends Repo {
       remoteUrl: this.dir,
     });
   }
-  static async clone(args: { db: DB; dir: string; branch: string }) {
+  async resolveRef(args: {
+    orgName: string;
+    repoName: string;
+    branchName: string;
+  }): Promise<string> {
+    return git.resolveRef({
+      fs,
+      dir: this.dir,
+      ref: args.branchName,
+    });
+  }
+  async readCommit(args: { oid: string }) {
+    console.log(`Reading commit ${args.oid}`);
+    const commit = await Commit.find({ repo: this, commitOid: args.oid });
+    return commit.toJSON();
+  }
+  static async clone(args: {
+    db: DB;
+    dir: string;
+    branchName: string;
+    orgName: string;
+    repoName: string;
+  }) {
     const repo = new FilesystemRepo(args);
     await repo.save();
-    const commitOid = await git.resolveRef({
-      fs,
-      dir: args.dir,
-      ref: args.branch,
+    const commitOid = await repo.resolveRef({
+      orgName: args.orgName,
+      repoName: args.repoName,
+      branchName: args.branchName,
     });
 
     if (typeof commitOid !== "string") {
@@ -42,7 +74,7 @@ export class FilesystemRepo extends Repo {
       oid: commitOid,
     });
 
-    const lsTree = await repo._lsTree({ dir: args.dir, ref: args.branch });
+    const lsTree = await repo._lsTree({ dir: args.dir, ref: args.branchName });
     if (typeof lsTree === "string") {
       const lines = lsTree.split("\n");
 
@@ -106,12 +138,12 @@ export class FilesystemRepo extends Repo {
       const branch = await Branch.create({
         repo,
         commit,
-        branchName: args.branch,
+        branchName: args.branchName,
       });
       return { repo, branch, commit };
     } else {
       throw new Error(
-        `Unexepcted response from ls-tree for ref ${args.branch}`
+        `Unexepcted response from ls-tree for ref ${args.branchName}`
       );
     }
   }

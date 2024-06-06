@@ -1,5 +1,8 @@
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
-import type { AppRouter } from "~/services/git/trpc-router";
+import type {
+  AppRouter,
+  createCaller,
+} from "~/services/git-2/repo/trpc-router";
 
 export const trpc = createTRPCClient<AppRouter>({
   links: [
@@ -8,3 +11,7 @@ export const trpc = createTRPCClient<AppRouter>({
     }),
   ],
 });
+
+export const real: ReturnType<typeof createCaller> = {
+  resolveRef: trpc.resolveRef.query,
+};
