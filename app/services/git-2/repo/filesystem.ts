@@ -38,14 +38,13 @@ export class FilesystemRepo extends Repo {
     repoName: string;
     branchName: string;
   }): Promise<string> {
-    return git.resolveRef({
-      fs,
-      dir: this.dir,
-      ref: args.branchName,
+    const branch = await Branch.find({
+      repo: this,
+      branchName: args.branchName,
     });
+    return branch.commitOid;
   }
   async readCommit(args: { oid: string }) {
-    console.log(`Reading commit ${args.oid}`);
     const commit = await Commit.find({ repo: this, commitOid: args.oid });
     return commit.toJSON();
   }
@@ -58,10 +57,10 @@ export class FilesystemRepo extends Repo {
   }) {
     const repo = new FilesystemRepo(args);
     await repo.save();
-    const commitOid = await repo.resolveRef({
-      orgName: args.orgName,
-      repoName: args.repoName,
-      branchName: args.branchName,
+    const commitOid = await git.resolveRef({
+      fs,
+      dir: repo.dir,
+      ref: args.branchName,
     });
 
     if (typeof commitOid !== "string") {

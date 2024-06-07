@@ -44,6 +44,7 @@ it("can clone a repo", async () => {
   const { db: serverDB } = await setup();
   const { db: browserDB } = await setup();
 
+  // This all happens in node
   const { repo, branch } = await FilesystemRepo.clone({
     db: serverDB,
     dir: movieRepoPath,
@@ -53,6 +54,7 @@ it("can clone a repo", async () => {
   });
   expect(await branch.currentCommit()).toBeDefined();
 
+  // This all happens in the browser, except the caller is an HTTP implementation
   const caller = createCaller({ repo });
 
   const { branch: branchFromBrowser } = await TrpcRepo.clone({

@@ -49,6 +49,28 @@ export class Branch {
   async currentCommit(): Promise<Commit> {
     return Commit.find({ repo: this.repo, commitOid: this.commitOid });
   }
+  static async find(args: { repo: Repo; branchName: string }) {
+    const record = await args.repo.db.query.branches.findFirst({
+      where: (f, o) => o.and(o.eq(f.branchName, args.branchName)),
+    });
+    if (!record)
+      throw new Error(`Branch not found for name ${args.branchName}`);
+
+    return Branch.fromRecord({ repo: args.repo, record });
+  }
+
+  static async fromRecord(args: {
+    repo: Repo;
+    record: NonNullable<
+      Awaited<ReturnType<DB["query"]["branches"]["findFirst"]>>
+    >;
+  }) {
+    return new Branch({
+      repo: args.repo,
+      branchName: args.record.branchName,
+      commitOid: args.record.commitOid,
+    });
+  }
   static async create(args: {
     repo: Repo;
     commit: Commit;
